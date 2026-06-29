@@ -1,0 +1,46 @@
+Package: bifactory
+Title: (Bifactor) ESEM with Continuous (MLR) or Ordered (WLSMV) Data
+Version: 0.5.0
+Authors@R:
+    person(given  = "Leon T.",
+           family = "De Beer",
+           email  = "leondb@gmail.com",
+           role   = c("aut", "cre"))
+Description: Fits Exploratory Structural Equation Models (ESEM), bifactor
+    ESEM (B-ESEM), and Confirmatory Factor Analysis (CFA) with numerical
+    output aligned to 'Mplus' conventions. Continuous models use 'lavaan'
+    native 'efa()' blocks (MLR). Ordered-categorical ESEM defaults to 'lavaan'
+    WLSMV; ordered B-ESEM uses a custom diagonally weighted least squares
+    (DWLS) path with polychoric correlations from 'psych', rotation-delta
+    standard errors via 'numDeriv', and mean-and-variance-adjusted chi-square.
+    Target, geomin,
+    and oblimin rotations use 'GPArotation'; the bifactor ESEM approach
+    follows Morin, Arens and Marsh (2016) <doi:10.1080/10705511.2014.961800>.
+    Additional features include multi-group measurement invariance
+    (configural through strict, with partial invariance), ESEM-within-CFA
+    conversion, McDonald's omega reliability suite, the Mehrvarz and
+    Rouder (2026) <doi:10.31234/osf.io/95enc_v3> alignment ratio check
+    for ICM-CFA misspecification, and optional side-by-side comparison
+    with 'Mplus' output via 'MplusAutomation'.
+License: AGPL-3
+URL: https://github.com/leondebeer/bifactory
+BugReports: https://github.com/leondebeer/bifactory/issues
+Encoding: UTF-8
+Depends:
+    R (>= 4.1.0)
+Imports:
+    lavaan (>= 0.6-21),
+    GPArotation,
+    psych,
+    MASS,
+    numDeriv,
+    stats,
+    utils,
+    graphics,
+    methods
+Suggests:
+    MplusAutomation,
+    openxlsx2,
+    testthat (>= 3.0.0)
+Config/testthat/edition: 3
+RoxygenNote: 7.3.3

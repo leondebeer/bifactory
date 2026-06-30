@@ -4,8 +4,8 @@
 
 ## Features
 
-* ESEM, bifactor ESEM (B-ESEM), and CFA with numerical output aligned to Mplus
-  conventions.
+* Bifactor ESEM (B-ESEM), standard ESEM, and CFA for continuous and
+  ordered-categorical data.
 * Continuous models via 'lavaan' native `efa()` blocks (MLR).
 * Ordered-categorical ESEM via 'lavaan' WLSMV; ordered B-ESEM via a custom
   diagonally weighted least squares (DWLS) path with polychoric correlations

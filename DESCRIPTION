@@ -6,22 +6,22 @@ Authors@R:
            family = "De Beer",
            email  = "leondb@gmail.com",
            role   = c("aut", "cre"))
-Description: Fits Exploratory Structural Equation Models (ESEM), bifactor
-    ESEM (B-ESEM), and Confirmatory Factor Analysis (CFA) with numerical
-    output aligned to 'Mplus' conventions. Continuous models use 'lavaan'
+Description: Fits bifactor Exploratory Structural Equation Models (B-ESEM),
+    together with standard ESEM and Confirmatory Factor Analysis (CFA), for
+    continuous and ordered-categorical data. Continuous models use 'lavaan'
     native 'efa()' blocks (MLR). Ordered-categorical ESEM defaults to 'lavaan'
     WLSMV; ordered B-ESEM uses a custom diagonally weighted least squares
     (DWLS) path with polychoric correlations from 'psych', rotation-delta
-    standard errors via 'numDeriv', and mean-and-variance-adjusted chi-square.
-    Target, geomin,
-    and oblimin rotations use 'GPArotation'; the bifactor ESEM approach
-    follows Morin, Arens and Marsh (2016) <doi:10.1080/10705511.2014.961800>.
-    Additional features include multi-group measurement invariance
-    (configural through strict, with partial invariance), ESEM-within-CFA
-    conversion, McDonald's omega reliability suite, the Mehrvarz and
-    Rouder (2026) <doi:10.31234/osf.io/95enc_v3> alignment ratio check
-    for ICM-CFA misspecification, and optional side-by-side comparison
-    with 'Mplus' output via 'MplusAutomation'.
+    standard errors via 'numDeriv', and a mean- and variance-adjusted
+    chi-square. Target, geomin, and oblimin rotations use 'GPArotation'; the
+    bifactor ESEM approach follows Morin, Arens and Marsh (2016)
+    <doi:10.1080/10705511.2014.961800>. Additional features include
+    multi-group measurement invariance (configural through strict, with
+    partial invariance), ESEM-within-CFA conversion, McDonald's omega
+    reliability suite, and the Mehrvarz and Rouder (2026)
+    <doi:10.31234/osf.io/95enc_v3> alignment ratio check for ICM-CFA
+    misspecification. An optional 'MplusAutomation' interface allows
+    side-by-side comparison with 'Mplus' output.
 License: AGPL-3
 URL: https://github.com/leondebeer/bifactory
 BugReports: https://github.com/leondebeer/bifactory/issues

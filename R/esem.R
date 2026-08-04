@@ -314,6 +314,9 @@ esem <- function(data,
       indicators           = indicators,
       std_rotated_loadings = if (!is.null(cached)) cached$L  else NULL,
       se_loadings          = if (!is.null(cached)) cached$SE else NULL,
+      se_loadings_stale    = if (!is.null(heywood_log)) TRUE else NULL,
+      se_loadings_note     = if (!is.null(heywood_log))
+        "Rotation changed after SEs were computed; z and p are undefined." else NULL,
       heywood_log          = heywood_log,
       call                 = mc
     ),

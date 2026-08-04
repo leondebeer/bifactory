@@ -354,9 +354,18 @@ coef.esem_fit <- function(object, standardized = FALSE, ...) {
 #'   plain output when colour is unavailable. Default \code{TRUE}.
 #'
 #' @return A data frame of class \code{bifactory_parameters} holding the
-#'   standardized parameter table (plus a \code{model} column when \code{x} is
-#'   a pipeline). Printing the object renders the formatted, colour-coded
-#'   table; assign the result to use the values without console output.
+#'   standardized parameter table. Its columns are \code{factor}, \code{item},
+#'   \code{std}, \code{se}, \code{z}, \code{p}, and \code{loading_type}; a
+#'   \code{model} column is added when \code{x} is a pipeline. With
+#'   \code{type = "all"}, rows for residual variances and thresholds are also
+#'   included. Printing the object renders the formatted, colour-coded table;
+#'   assign the result to use the values without console output.
+#'
+#' On a Heywood-corrected fit, the rotation changed after the standard errors
+#' were computed. Consequently, \code{se}, \code{z}, and \code{p} are
+#' \code{NA}, while the corrected standardized loadings in \code{std} are
+#' retained. When \code{suppress > 0}, rows whose \code{z} is \code{NA} are
+#' dropped, as are rows below the suppression threshold.
 #' @export
 parameters <- function(x,
                        model             = "all",
@@ -408,8 +417,15 @@ parameters <- function(x,
         !is.null(fit_obj$se_loadings)) {
       L  <- fit_obj$std_rotated_loadings
       SE <- fit_obj$se_loadings
-      z  <- L / SE
-      p  <- 2 * pnorm(-abs(z))
+      if (isTRUE(fit_obj$se_loadings_stale)) {
+        SE <- matrix(NA_real_, nrow = nrow(L), ncol = ncol(L),
+                     dimnames = dimnames(L))
+        z  <- SE
+        p  <- SE
+      } else {
+        z <- L / SE
+        p <- 2 * pnorm(-abs(z))
+      }
       out <- do.call(rbind, lapply(colnames(L), function(fac)
         data.frame(factor       = fac,
                    item         = rownames(L),
@@ -422,7 +438,7 @@ parameters <- function(x,
                             "primary", "cross")
                    } else "cross",
                    stringsAsFactors = FALSE)))
-      if (suppress > 0) out <- out[abs(out$z) >= suppress, , drop = FALSE]
+      if (suppress > 0) out <- out[!is.na(out$z) & abs(out$z) >= suppress, , drop = FALSE]
       return(out)
     }
 

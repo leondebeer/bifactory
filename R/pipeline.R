@@ -1082,7 +1082,10 @@ print.esem_comparison_pipeline <- function(x, hints = TRUE, ...) {
   hi_ncp <- tryCatch(suppressWarnings(
     uniroot(function(l) pchisq(chisq, df, ncp = l, lower.tail = FALSE) - 0.95,
             lower = 0, upper = max(chisq * 10, 500))$root
-  ), error = function(e) NA_real_)
+  ), error = function(e) tryCatch(suppressWarnings(
+    uniroot(function(l) pchisq(chisq, df, ncp = l, lower.tail = FALSE) - 0.95,
+            lower = 0, upper = max(chisq * 10, df * 10, 1000))$root
+  ), error = function(e) NA_real_))
   c(sqrt(lo_ncp / (df * (n - 1L))),   # L90%CI
     sqrt(hi_ncp / (df * (n - 1L))))   # U90%CI
 }

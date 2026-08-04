@@ -531,7 +531,7 @@ parse_mplus_polychoric <- function(out_file) {
            paste(missing_rows, collapse = ", "), call. = FALSE)
     pf_idx <- apply(initial_target[indicators, factor_names, drop = FALSE],
                     1, function(row) {
-                      w <- which(row == 1)
+                      w <- which(row == 1 | is.na(row))
                       if (length(w)) w[1L] else NA_integer_
                     })
   } else {

@@ -61,19 +61,31 @@ ECV), and model fit are invariant under orthogonal rotation, so alignment
 affects only the per-loading partition, not substantive conclusions.
 }
 \examples{
-\dontrun{
+data("HolzingerSwineford1939", package = "lavaan")
+
+spec <- specify_model(
+  Visual  = c("x1", "x2", "x3"),
+  Textual = c("x4", "x5", "x6"),
+  Speed   = c("x7", "x8", "x9"),
+  data  = HolzingerSwineford1939,
+  group = "school"
+)
+
+\donttest{
+  inv <- esem_invariance(spec)
+
   # Canonical orientation (no external reference, deterministic)
-  inv <- esem_invariance(spec, model = "besem")
   aligned <- align_loadings(inv, target = "canonical", level = "configural")
   print(aligned)
 
-  # Align to Mplus output via MplusAutomation
-  library(MplusAutomation)
-  mp <- readModels("besem_inv_configural.out")
-  tgt <- extract_mplus_loadings(mp)
-  aligned <- align_loadings(inv, target = tgt, level = "configural")
-
   # Within-fit: align all groups to group 1's orientation
   aligned <- align_loadings(inv, target = "group1", level = "configural")
+}
+
+\dontrun{
+  # Align to Mplus output (requires a Mplus .out file + MplusAutomation)
+  mp  <- MplusAutomation::readModels("besem_inv_configural.out")
+  tgt <- extract_mplus_loadings(mp)
+  aligned <- align_loadings(inv, target = tgt, level = "configural")
 }
 }

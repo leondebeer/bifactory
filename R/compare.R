@@ -25,17 +25,20 @@
 #' @seealso \code{\link{esem}}
 #'
 #' @examples
-#' \dontrun{
+#' data("HolzingerSwineford1939", package = "lavaan")
+#' d <- HolzingerSwineford1939[, paste0("x", 1:9)]
+#'
+#' \donttest{
 #' # Fit ESEM
-#' esem_result <- esem(mydata, nfactors = 3)
+#' esem_result <- esem(d, nfactors = 3)
 #'
 #' # Define comparison CFA (no cross-loadings)
 #' cfa_model <- "
-#'   F1 =~ y1 + y2 + y3 + y4 + y5
-#'   F2 =~ y6 + y7 + y8 + y9 + y10
-#'   F3 =~ y11 + y12 + y13 + y14 + y15
+#'   Visual  =~ x1 + x2 + x3
+#'   Textual =~ x4 + x5 + x6
+#'   Speed   =~ x7 + x8 + x9
 #' "
-#' comparison <- esem_compare(esem_result, cfa_model, data = mydata)
+#' comparison <- esem_compare(esem_result, cfa_model, data = d)
 #' print(comparison)
 #' }
 #'

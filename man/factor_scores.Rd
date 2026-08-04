@@ -74,24 +74,20 @@ factor and one row per observation.  Works with any \code{esem_fit},
 plain \code{lavaan} object, or \code{esem_invariance} result.
 }
 \examples{
-\dontrun{
+data("HolzingerSwineford1939", package = "lavaan")
+d <- HolzingerSwineford1939[, paste0("x", 1:9)]
+
+\donttest{
 # Single fit
-fit    <- esem(mydata, nfactors = 3)
+fit    <- esem(d, nfactors = 3)
 scores <- factor_scores(fit)
 head(scores)
 
 # Merge back to original data
-mydata_with_scores <- cbind(mydata, factor_scores(fit))
-
-# Invariance result -- auto-selects most constrained passing level
-inv    <- esem_invariance(spec)
-scores <- factor_scores(inv)
-
-# Force a specific invariance level
-scores <- factor_scores(inv, level = "weak")
+d_with_scores <- cbind(d, factor_scores(fit))
 
 # Bartlett method
-scores <- factor_scores(fit, method = "bartlett")
+scores_b <- factor_scores(fit, method = "bartlett")
 }
 
 }

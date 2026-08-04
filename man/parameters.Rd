@@ -35,7 +35,10 @@ ANSI codes. Supported in RStudio and most terminals; falls back silently to
 plain output when colour is unavailable. Default \code{TRUE}.}
 }
 \value{
-Invisibly returns the parameter table as a data frame.
+A data frame of class \code{bifactory_parameters} holding the
+  standardized parameter table (plus a \code{model} column when \code{x} is
+  a pipeline). Printing the object renders the formatted, colour-coded
+  table; assign the result to use the values without console output.
 }
 \description{
 Prints a formatted parameter table -- standardized loadings, standard errors,

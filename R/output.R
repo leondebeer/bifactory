@@ -20,16 +20,23 @@
 #' }
 #'
 #' @examples
-#' \dontrun{
-#' results <- run_comparison(spec, mplus_folder = "path/to/mplus")
+#' data("HolzingerSwineford1939", package = "lavaan")
+#'
+#' spec <- specify_model(
+#'   Visual  = c("x1", "x2", "x3"),
+#'   Textual = c("x4", "x5", "x6"),
+#'   Speed   = c("x7", "x8", "x9"),
+#'   data    = HolzingerSwineford1939,
+#'   label   = "Holzinger-Swineford"
+#' )
+#'
+#' \donttest{
+#' results <- run_comparison(spec, n_starts = 5L)
 #' lc <- compare_loadings(results)
 #' head(lc)
 #'
-#' # Primary loadings only
+#' # Primary loadings only (Mplus_* columns are NA without a Mplus run)
 #' lc[lc$loading_type == "primary", ]
-#'
-#' # Largest absolute R - Mplus differences
-#' lc[order(abs(lc$diff_std), decreasing = TRUE), ]
 #' }
 #'
 #' @export
@@ -97,8 +104,18 @@ compare_loadings <- function(results) {
 #' @return Invisibly returns a character vector of file paths written.
 #'
 #' @examples
-#' \dontrun{
-#' results <- run_comparison(spec)
+#' data("HolzingerSwineford1939", package = "lavaan")
+#'
+#' spec <- specify_model(
+#'   Visual  = c("x1", "x2", "x3"),
+#'   Textual = c("x4", "x5", "x6"),
+#'   Speed   = c("x7", "x8", "x9"),
+#'   data    = HolzingerSwineford1939,
+#'   label   = "Holzinger-Swineford"
+#' )
+#'
+#' \donttest{
+#' results <- run_comparison(spec, n_starts = 5L)
 #' indices <- compute_indices(results)
 #' save_results(results, indices,
 #'              output_folder = file.path(tempdir(), "esem_results"))
@@ -235,27 +252,28 @@ save_results <- function(results, omega = NULL,
   }
 
   # Print summary
-  cat("Results saved to:", output_folder, "\n")
-  for (f in written) cat(" ", basename(f), "\n")
+  message(paste("Results saved to:", output_folder))
+  for (f in written) message(paste(" ", basename(f)))
 
   # Max |R - Mplus| summary if lc was populated
   if (!is.null(lc)) {
     safe_max <- function(x) { x <- abs(x[!is.na(x)]); if (length(x) == 0) NA_real_ else max(x) }
-    cat("\nMax |R - Mplus| STDYX:\n")
+    message("\nMax |R - Mplus| STDYX:")
     for (mod in c("CFA", "ESEM", "BESEM")) {
       sl <- lc[lc$model == mod, ]
       mp <- safe_max(sl$diff_std[sl$loading_type == "primary"])
       mc <- safe_max(sl$diff_std[sl$loading_type == "cross"])
-      cat(sprintf("  %-6s  primary: %s   cross: %s\n",
+      message(sprintf("  %-6s  primary: %s   cross: %s",
                   mod,
                   if (is.na(mp)) "   --  " else sprintf("%.4f", mp),
                   if (is.na(mc)) "   --  " else sprintf("%.4f", mc)))
     }
     bl <- lc[lc$model == "BESEM", ]
     if (!all(is.na(bl$diff_std)) && safe_max(bl$diff_std) > 0.10)
-      cat("\n  Note: BESEM loadings differ > 0.10 between R and Mplus.\n",
-          " This is normal when both converge to different rotation solutions.\n",
-          " Fit indices (CFI/TLI/RMSEA) are rotation-invariant and should match.\n")
+      message(paste0(
+          "\n  Note: BESEM loadings differ > 0.10 between R and Mplus.\n",
+          "  This is normal when both converge to different rotation solutions.\n",
+          "  Fit indices (CFI/TLI/RMSEA) are rotation-invariant and should match."))
   }
 
   invisible(written)

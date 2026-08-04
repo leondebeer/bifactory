@@ -327,32 +327,32 @@ print.esem_spec <- function(x, ...) {
 #' }
 #'
 #' @examples
-#' \dontrun{
+#' data("HolzingerSwineford1939", package = "lavaan")
+#'
 #' spec <- specify_model(
-#'   EX = c("batEX1","batEX2","batEX3","batEX4",
-#'          "batEX5","batEX6","batEX7","batEX8"),
-#'   MD = c("batMD1","batMD2","batMD3","batMD4","batMD5"),
-#'   CI = c("batCI1","batCI2","batCI3","batCI4","batCI5"),
-#'   data  = Rdata,
-#'   label = "Burnout Battery"
+#'   Visual  = c("x1", "x2", "x3"),
+#'   Textual = c("x4", "x5", "x6"),
+#'   Speed   = c("x7", "x8", "x9"),
+#'   data    = HolzingerSwineford1939,
+#'   label   = "Holzinger-Swineford"
 #' )
 #'
-#' # R only
-#' results <- run_comparison(spec)
-#' print(results)
-#'
-#' # R + Mplus
-#' results <- run_comparison(
-#'   spec,
-#'   mplus_folder = "path/to/mplus_output"
-#' )
+#' \donttest{
+#' # Fit CFA, ESEM, and B-ESEM in R and build the comparison table
+#' results <- run_comparison(spec, n_starts = 5L)
 #' print(results)
 #'
 #' # Access individual fits
 #' summary(results$fit_esem, fit.measures = TRUE, standardized = TRUE)
 #' std_loadings(results$fit_besem, suppress = 0.10)
 #' factor_correlations(results$fit_esem)
-#' plot(results$alignment)
+#' }
+#'
+#' \dontrun{
+#' # Also run all three models in Mplus and compare side by side.
+#' # Requires a licensed Mplus installation reachable via `mplus_command`.
+#' results <- run_comparison(spec, mplus_folder = tempfile("mplus_"))
+#' print(results)
 #' }
 #'
 #' @export
@@ -367,9 +367,9 @@ run_comparison <- function(spec,
     stop("`spec` must be an esem_spec object from specify_model().",
          call. = FALSE)
 
-  cat("======================================================\n")
-  cat(" Running comparison pipeline:", spec$label, "\n")
-  cat("======================================================\n\n")
+  message("======================================================")
+  message(paste(" Running comparison pipeline:", spec$label))
+  message("======================================================\n")
 
   data           <- spec$data
   estimator_cfa  <- spec$estimator_cfa
@@ -416,9 +416,9 @@ run_comparison <- function(spec,
   is_ordered <- !is.null(ordered) && length(ordered) > 0
 
   # CFA
-  cat("Fitting 1/3: CFA via lavaan::cfa() ",
+  message("Fitting 1/3: CFA via lavaan::cfa() ",
       if (is_ordered) "(WLSMV + theta)" else "(MLR)",
-      "... ", sep = "")
+      "... ")
   cfa_args <- list(
     model     = spec$cfa_syntax,
     data      = data,
@@ -431,14 +431,14 @@ run_comparison <- function(spec,
   if (!is.null(group))        cfa_args$group            <- group
   if (!is.null(group_equal))  cfa_args$group.equal      <- group_equal
   fit_cfa <- do.call(lavaan::cfa, cfa_args)
-  cat("done\n")
+  message("done")
 
   # ESEM: lavaan efa() path matches Mplus exactly (same rotation local minimum).
   # The custom DWLS path (method="dwls") is available as a fallback for Heywood
 
   # cases but finds different rotation minima -- not used by default.
   if (is_ordered) {
-    cat("Fitting 2/3: ESEM via lavaan efa() block (WLSMV + targetQ rotation)... ")
+    message("Fitting 2/3: ESEM via lavaan efa() block (WLSMV + targetQ rotation)... ")
     fit_esem <- esem_ordered(
       data         = data,
       nfactors     = spec$nfactors,
@@ -450,9 +450,9 @@ run_comparison <- function(spec,
       group_equal  = group_equal,
       missing      = missing
     )
-    cat("done\n")
+    message("done")
   } else {
-    cat("Fitting 2/3: ESEM via lavaan efa() block (MLR + targetQ rotation)... ")
+    message("Fitting 2/3: ESEM via lavaan efa() block (MLR + targetQ rotation)... ")
     fit_esem <- esem(
       data         = data,
       nfactors     = spec$nfactors,
@@ -465,15 +465,14 @@ run_comparison <- function(spec,
       group        = group,
       group_equal  = group_equal
     )
-    cat("done\n")
+    message("done")
   }
 
   # B-ESEM: post-hoc rotation method for ordered (Asparouhov & Muthen 2009);
   # unrestricted WLSMV fit + bifactor targetT rotation + numDeriv SE correction.
   if (is_ordered) {
-    cat("Fitting 3/3: B-ESEM via custom DWLS + targetT rotation ",
-        "(Asparouhov & Muthen 2009, ", n_starts, " random starts)...\n",
-        sep = "")
+    message("Fitting 3/3: B-ESEM via custom DWLS + targetT rotation ",
+        "(Asparouhov & Muthen 2009, ", n_starts, " random starts)...")
     fit_besem <- besem_ordered(
       data             = data,
       specific_factors = spec$factors,
@@ -484,8 +483,8 @@ run_comparison <- function(spec,
       missing          = missing
     )
   } else {
-    cat("Fitting 3/3: B-ESEM (MLR + targetT rotation, ",
-        n_starts, " random starts)... ", sep = "")
+    message("Fitting 3/3: B-ESEM (MLR + targetT rotation, ",
+        n_starts, " random starts)... ")
     fit_besem <- besem(
       data             = data,
       specific_factors = spec$factors,
@@ -496,7 +495,7 @@ run_comparison <- function(spec,
       n_starts         = n_starts
     )
   }
-  cat("done\n")
+  message("done")
 
   # For ML/MLR: pre-cache standardized solution so parameters() is instant.
   # standardizedsolution() on EFA rotation models with MLR/FIML can be slow;
@@ -505,15 +504,15 @@ run_comparison <- function(spec,
     for (.nm in c("esem", "besem")) {
       .fo <- if (.nm == "esem") fit_esem else fit_besem
       if (is.null(.fo$std_rotated_loadings)) {
-        cat(sprintf("  Caching standardized solution (%s)... ", toupper(.nm)))
+        message(sprintf("  Caching standardized solution (%s)... ", toupper(.nm)))
         .lav <- .fo$lavaan_fit
         .cc  <- .cache_std_loadings(.lav)
         if (!is.null(.cc)) {
           if (.nm == "esem")   { fit_esem$std_rotated_loadings  <- .cc$L; fit_esem$se_loadings  <- .cc$SE }
           if (.nm == "besem")  { fit_besem$std_rotated_loadings <- .cc$L; fit_besem$se_loadings <- .cc$SE }
-          cat("done\n")
+          message("done")
         } else {
-          cat("skipped (will compute on demand)\n")
+          message("skipped (will compute on demand)")
         }
       }
     }
@@ -524,7 +523,7 @@ run_comparison <- function(spec,
   mplus_results <- NULL
 
   if (!is.null(mplus_folder)) {
-    cat("\nRunning Mplus models...\n")
+    message("\nRunning Mplus models...")
     mplus_results <- tryCatch(
       .run_mplus_pipeline(.spec_nogroup(spec), mplus_folder,
                           mplus_command = mplus_command),
@@ -537,7 +536,7 @@ run_comparison <- function(spec,
   }
 
   # -- 4. Build comparison table -----------------------------------------------
-  cat("\nBuilding comparison table...\n")
+  message("\nBuilding comparison table...")
   comparison_table <- .build_comparison_table(
     fit_cfa, fit_esem, fit_besem, mplus_results
   )
@@ -561,7 +560,7 @@ run_comparison <- function(spec,
       )
     }
   }
-  cat("\n")
+  message("")
   .print_pipeline_summary(spec, fit_cfa, fit_esem, fit_besem, comparison_table)
 
   # Attach spec to each S3 fit so standalone parameters() calls can build the
@@ -1016,7 +1015,7 @@ print.esem_comparison_pipeline <- function(x, hints = TRUE, ...) {
 
   # Run all three models in Mplus
   for (inp in c("cfa_model.inp", "esem_measurement.inp", "besem_measurement.inp")) {
-    cat("  Running Mplus:", sub("\\.inp$","", inp), "... ")
+    message(paste("  Running Mplus:", sub("\\.inp$","", inp), "... "))
     MplusAutomation::runModels(file.path(folder, inp),
                                Mplus_command = mplus_command)
     out_file <- file.path(folder, sub("\\.inp$", ".out", inp))
@@ -1026,7 +1025,7 @@ print.esem_comparison_pipeline <- function(x, hints = TRUE, ...) {
     } else {
       status <- "NO OUTPUT"
     }
-    cat(status, "\n")
+    message(status)
   }
 
   # Read results
@@ -1060,7 +1059,8 @@ print.esem_comparison_pipeline <- function(x, hints = TRUE, ...) {
                SRMR  = round(s$SRMR, 3))
   }
   tbl <- rbind(fi(mp$cfa,"CFA"), fi(mp$esem,"ESEM"), fi(mp$besem,"BESEM"))
-  cat("\nMplus fit indices:\n"); print(tbl, row.names = FALSE)
+  message("\nMplus fit indices:")
+  message(paste(utils::capture.output(print(tbl, row.names = FALSE)), collapse = "\n"))
   structure(list(mplus_results = mp, comparison_table = tbl,
                  fit_cfa = NULL, fit_esem = NULL, fit_besem = NULL,
                  spec = NULL, alignment = NULL),
@@ -1107,10 +1107,20 @@ print.esem_comparison_pipeline <- function(x, hints = TRUE, ...) {
 #'   table.
 #'
 #' @examples
-#' \dontrun{
+#' data("HolzingerSwineford1939", package = "lavaan")
+#' d <- HolzingerSwineford1939[, paste0("x", 1:9)]
+#'
+#' \donttest{
+#' fit_e <- esem(d, nfactors = 3)
+#' fit_b <- besem(d, specific_factors = list(
+#'   Visual  = c("x1", "x2", "x3"),
+#'   Textual = c("x4", "x5", "x6"),
+#'   Speed   = c("x7", "x8", "x9")
+#' ), n_starts = 5L)
+#'
 #' noquote(rbind(
-#'   ESEM  = fit_indices(results$fit_esem),
-#'   BESEM = fit_indices(results$fit_besem)
+#'   ESEM  = fit_indices(fit_e),
+#'   BESEM = fit_indices(fit_b)
 #' ))
 #' }
 #' @export
@@ -1307,7 +1317,7 @@ fit_indices <- function(fit) {
   }
 
   for (col in val_cols) disp[[col]] <- format(disp[[col]], justify = "right")
-  print(disp, row.names = FALSE)
+  message(paste(utils::capture.output(print(disp, row.names = FALSE)), collapse = "\n"))
 }
 
 
@@ -1325,28 +1335,26 @@ fit_indices <- function(fit) {
 
 .print_pipeline_summary <- function(spec, fit_cfa, fit_esem,
                                      fit_besem, comparison_table) {
-  cat("======================================================\n")
-  cat(" Results:", spec$label, "\n")
-  cat("======================================================\n\n")
-  cat("Fit Index Comparison:\n\n")
-  print(comparison_table, row.names = FALSE)
+  message("======================================================")
+  message(paste(" Results:", spec$label))
+  message("======================================================\n")
+  message("Fit Index Comparison:\n")
+  message(paste(utils::capture.output(print(comparison_table, row.names = FALSE)), collapse = "\n"))
 
-  cat("\nFactor Correlations:\n")
-  cat("  CFA: ")
+  message("\nFactor Correlations:")
   cor_cfa <- lavaan::lavInspect(fit_cfa, "cor.lv")
   if (is.list(cor_cfa)) cor_cfa <- cor_cfa[[1L]]   # multi-group: use group 1
   cor_cfa <- round(cor_cfa, 3)
   pairs   <- utils::combn(rownames(cor_cfa), 2, simplify = FALSE)
-  cat(paste(vapply(pairs, function(p)
+  message("  CFA: ", paste(vapply(pairs, function(p)
     paste0(p[1],"-",p[2]," = ", cor_cfa[p[1],p[2]]),
-    character(1)), collapse = ", "), "\n")
+    character(1)), collapse = ", "))
 
-  cat("  ESEM: ")
   cor_esem <- factor_correlations(fit_esem)
   pairs_e  <- utils::combn(rownames(cor_esem), 2, simplify = FALSE)
-  cat(paste(vapply(pairs_e, function(p)
+  message("  ESEM: ", paste(vapply(pairs_e, function(p)
     paste0(p[1],"-",p[2]," = ", cor_esem[p[1],p[2]]),
-    character(1)), collapse = ", "), "\n")
+    character(1)), collapse = ", "))
 
-  cat("  B-ESEM: all 0 (orthogonal)\n\n")
+  message("  B-ESEM: all 0 (orthogonal)\n")
 }

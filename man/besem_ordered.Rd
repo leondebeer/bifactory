@@ -130,12 +130,25 @@ Do not interpret \code{summary(x$lavaan_fit)}, \code{modindices(x)}, or
 }
 
 \examples{
-\dontrun{
+data("HolzingerSwineford1939", package = "lavaan")
+
+# Derive ordered (5-category Likert) versions of the 9 continuous items
+items <- paste0("x", 1:9)
+ord <- as.data.frame(lapply(HolzingerSwineford1939[, items], function(v) {
+  as.integer(cut(v, breaks = quantile(v, probs = seq(0, 1, 0.2)),
+                 include.lowest = TRUE))
+}))
+names(ord) <- items
+
+\donttest{
 fit_b_ord <- besem_ordered(
-  data = Rdata,
+  data = ord,
   specific_factors = list(
-    EX = items_EX, MD = items_MD, CI = items_CI
-  )
+    Visual  = c("x1", "x2", "x3"),
+    Textual = c("x4", "x5", "x6"),
+    Speed   = c("x7", "x8", "x9")
+  ),
+  n_starts = 5L
 )
 summary(fit_b_ord, fit.measures = TRUE, standardized = TRUE)
 }

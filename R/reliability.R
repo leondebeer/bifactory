@@ -70,12 +70,18 @@
 #' \emph{Structural Equation Modeling}, \emph{23}(1), 116-139.
 #'
 #' @examples
-#' \dontrun{
-#' spec    <- specify_model(EX = paste0("batEX", 1:8),
-#'                          MD = paste0("batMD", 1:5),
-#'                          CI = paste0("batCI", 1:5),
-#'                          data = mydata, ordered = TRUE)
-#' results <- run_comparison(spec)
+#' data("HolzingerSwineford1939", package = "lavaan")
+#'
+#' spec <- specify_model(
+#'   Visual  = c("x1", "x2", "x3"),
+#'   Textual = c("x4", "x5", "x6"),
+#'   Speed   = c("x7", "x8", "x9"),
+#'   data    = HolzingerSwineford1939,
+#'   label   = "Holzinger-Swineford"
+#' )
+#'
+#' \donttest{
+#' results <- run_comparison(spec, n_starts = 5L)
 #' indices <- compute_indices(results)
 #' print(indices)
 #' }
@@ -561,7 +567,9 @@ print.reliability_indices <- function(x, ...) {
 #'
 #' @examples
 #' \dontrun{
-#' results <- run_comparison(spec, mplus_folder = "path/to/mplus")
+#' # Requires run_comparison() results that include a Mplus rotation reference
+#' # (results$mplus_results non-NULL), so a licensed Mplus install is needed.
+#' results <- run_comparison(spec, mplus_folder = tempfile("mplus_"))
 #' results <- refine_rotation(results)
 #' omega   <- compute_omega(results)
 #' print(omega)
@@ -644,16 +652,16 @@ refine_rotation <- function(results) {
   fn_proc <- 0.5 * sum(rot_proc$loadings[cross_mask]^2)
   fn_orig <- fit_b$rotation_criterion
 
-  cat(sprintf("Rotation criterion -- original: %.6f  |  Procrustes start: %.6f\n",
-              fn_orig, fn_proc))
+  message(sprintf("Rotation criterion -- original: %.6f  |  Procrustes start: %.6f",
+                  fn_orig, fn_proc))
 
   if (fn_proc >= fn_orig - 1e-8) {
-    cat("No improvement from Procrustes warm start. Original rotation retained.\n")
+    message("No improvement from Procrustes warm start. Original rotation retained.")
     return(invisible(results))
   }
 
-  cat(sprintf("Improvement found (delta = %.6f). Updating rotation.\n",
-              fn_orig - fn_proc))
+  message(sprintf("Improvement found (delta = %.6f). Updating rotation.",
+                  fn_orig - fn_proc))
 
   # -- Apply sign correction -----------------------------------------------------
   L_new <- rot_proc$loadings

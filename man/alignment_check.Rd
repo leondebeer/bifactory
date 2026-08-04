@@ -116,31 +116,30 @@ cluster) or misalignment (cross-loadings exist but are fixed to zero).
 }
 
 \examples{
-\dontrun{
+data("HolzingerSwineford1939", package = "lavaan")
+d <- HolzingerSwineford1939[, paste0("x", 1:9)]
+
 # Vector form of cluster assignment
 clusters <- c(
-  batEX1 = "EX", batEX2 = "EX", batEX3 = "EX",
-  batMD1 = "MD", batMD2 = "MD", batMD3 = "MD",
-  batCC1 = "CI", batCC2 = "CI", batCC3 = "CI"
+  x1 = "Visual",  x2 = "Visual",  x3 = "Visual",
+  x4 = "Textual", x5 = "Textual", x6 = "Textual",
+  x7 = "Speed",   x8 = "Speed",   x9 = "Speed"
 )
 
+\donttest{
 # Run alignment check (data only)
-check <- alignment_check(mydata, clusters)
+check <- alignment_check(d, clusters)
 print(check)
 
 # Run with a fitted CFA to quantify inflation
-library(lavaan)
 cfa_model <- "
-  EX =~ batEX1 + batEX2 + batEX3
-  MD =~ batMD1 + batMD2 + batMD3
-  CI =~ batCC1 + batCC2 + batCC3
+  Visual  =~ x1 + x2 + x3
+  Textual =~ x4 + x5 + x6
+  Speed   =~ x7 + x8 + x9
 "
-cfa_fit <- cfa(cfa_model, data = mydata, std.lv = TRUE)
-check   <- alignment_check(mydata, clusters, cfa_fit = cfa_fit)
+cfa_fit <- lavaan::cfa(cfa_model, data = d, std.lv = TRUE)
+check   <- alignment_check(d, clusters, cfa_fit = cfa_fit)
 print(check)
-
-# Visualise sorted alignment ratios for a specific pair
-plot(check, pair = "EX-MD")
 }
 
 }

@@ -50,8 +50,18 @@ Writes all standard output files to \code{output_folder}:
 }
 }
 \examples{
-\dontrun{
-results <- run_comparison(spec)
+data("HolzingerSwineford1939", package = "lavaan")
+
+spec <- specify_model(
+  Visual  = c("x1", "x2", "x3"),
+  Textual = c("x4", "x5", "x6"),
+  Speed   = c("x7", "x8", "x9"),
+  data    = HolzingerSwineford1939,
+  label   = "Holzinger-Swineford"
+)
+
+\donttest{
+results <- run_comparison(spec, n_starts = 5L)
 indices <- compute_indices(results)
 save_results(results, indices,
              output_folder = file.path(tempdir(), "esem_results"))

@@ -189,17 +189,17 @@ partial_invariance <- function(inv,
   converged     <- FALSE
 
   if (verbose) {
-    cat("======================================================\n")
-    cat(sprintf(" Partial Invariance: %s -- level: %s\n", inv$spec$label, level))
-    cat(sprintf(" Baseline: %s | dCFI cutoff: %.3f | max_free: %d\n",
+    message("======================================================")
+    message(sprintf(" Partial Invariance: %s -- level: %s", inv$spec$label, level))
+    message(sprintf(" Baseline: %s | dCFI cutoff: %.3f | max_free: %d",
                 baseline_level, delta_cfi_cutoff, max_free))
-    cat("======================================================\n\n")
+    message("======================================================\n")
   }
 
   # -- 4. Greedy loop ---------------------------------------------------------
   for (round_i in seq_len(max_free)) {
 
-    if (verbose) cat(sprintf("  Round %d: running lavTestScore ...", round_i))
+    if (verbose) message(sprintf("  Round %d: running lavTestScore ...", round_i))
 
     sc <- tryCatch(
       lavaan::lavTestScore(current_fit$lavaan_fit),
@@ -211,7 +211,7 @@ partial_invariance <- function(inv,
     )
 
     if (is.null(sc) || is.null(sc$uni) || nrow(sc$uni) == 0L) {
-      if (verbose) cat(" FAILED\n")
+      if (verbose) message(" FAILED")
       break
     }
 
@@ -220,14 +220,14 @@ partial_invariance <- function(inv,
     lbl_df <- lbl_df[!lbl_df$group_partial_label %in% group_partial, ]
 
     if (nrow(lbl_df) == 0L) {
-      if (verbose) cat(" no more constraints to free\n")
+      if (verbose) message(" no more constraints to free")
       break
     }
 
     best <- lbl_df[1L, ]  # already sorted descending by score
     group_partial <- c(group_partial, best$group_partial_label)
 
-    if (verbose) cat(sprintf(" freeing %s (score=%.2f) ...",
+    if (verbose) message(sprintf(" freeing %s (score=%.2f) ...",
                              best$label, best$score))
 
     # Refit with updated group.partial
@@ -249,7 +249,7 @@ partial_invariance <- function(inv,
     )
 
     if (is.null(new_fit)) {
-      if (verbose) cat(" FAILED\n")
+      if (verbose) message(" FAILED")
       group_partial <- group_partial[-length(group_partial)]   # undo last addition
       break
     }
@@ -271,7 +271,7 @@ partial_invariance <- function(inv,
       stringsAsFactors = FALSE
     )
 
-    if (verbose) cat(sprintf(" dCFI = %+.3f\n", dcfi))
+    if (verbose) message(sprintf(" dCFI = %+.3f", dcfi))
 
     if (dcfi >= delta_cfi_cutoff) {
       converged   <- TRUE
@@ -311,7 +311,7 @@ partial_invariance <- function(inv,
   prev_ds_fit    <- partial_fit
 
   for (ds_lv in downstream_levels) {
-    if (verbose) cat(sprintf("  Fitting downstream: %s (partial) ...", ds_lv))
+    if (verbose) message(sprintf("  Fitting downstream: %s (partial) ...", ds_lv))
 
     ds_fit <- tryCatch(
       .fit_invariance_model(
@@ -330,8 +330,8 @@ partial_invariance <- function(inv,
       }
     )
 
-    conv_msg <- if (is.null(ds_fit)) " FAILED\n" else " OK\n"
-    if (verbose) cat(conv_msg)
+    conv_msg <- if (is.null(ds_fit)) " FAILED" else " OK"
+    if (verbose) message(conv_msg)
 
     downstream[[ds_lv]] <- ds_fit
 
@@ -358,7 +358,7 @@ partial_invariance <- function(inv,
   )
 
   if (verbose) {
-    cat("\n")
+    message("")
     .print_partial_table(table_out, is_ordered, freed_params)
   }
 

@@ -45,10 +45,11 @@ side-by-side comparison of fit statistics against the R results from
 }
 \examples{
 \dontrun{
+# Requires a licensed Mplus installation reachable via `mplus_command`.
 inv <- esem_invariance(spec, model = "besem")
 cmp <- run_mplus_besem_invariance(
   inv,
-  output_folder = "mplus_inv/",
+  output_folder = tempfile("mplus_inv_"),
   mplus_command = "C:/Program Files/Mplus/mplus.exe",
   group_labels  = c("1" = "MALE", "2" = "FEMALE")
 )

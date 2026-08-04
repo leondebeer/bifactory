@@ -130,14 +130,19 @@ invariance factor means are freed in Group 2+ and fixed to 0 in Group 1.
 }
 
 \examples{
-\dontrun{
+data("HolzingerSwineford1939", package = "lavaan")
+
 spec <- specify_model(
-  EX = items_EX, MD = items_MD, CI = items_CI,
-  data  = Rdata,
-  group = "sex",
-  label = "Burnout Battery"
+  Visual  = c("x1", "x2", "x3"),
+  Textual = c("x4", "x5", "x6"),
+  Speed   = c("x7", "x8", "x9"),
+  data  = HolzingerSwineford1939,
+  group = "school",
+  label = "Holzinger-Swineford"
 )
 
+\donttest{
+# Continuous ESEM measurement invariance across schools
 inv <- esem_invariance(spec)
 print(inv)
 
@@ -145,18 +150,21 @@ print(inv)
 summary(inv$models$strong, fit.measures = TRUE, standardized = TRUE)
 lavaan::lavTestScore(inv$models$strong$lavaan_fit)
 
-# Ordered data (WLSMV)
-spec_ord <- specify_model(
-  EX = items_EX, MD = items_MD, CI = items_CI,
-  data    = Rdata,
-  group   = "sex",
-  ordered = TRUE,
-  label   = "Burnout Battery (Ordered)"
-)
-inv_ord <- esem_invariance(spec_ord)
+# Ordered data (WLSMV) and B-ESEM invariance follow the same pattern:
+# add `ordered = TRUE` to specify_model(), then optionally `model = "besem"`.
+items <- paste0("x", 1:9)
+ord <- as.data.frame(lapply(HolzingerSwineford1939[, items], function(v) {
+  as.integer(cut(v, breaks = quantile(v, probs = seq(0, 1, 0.2)),
+                 include.lowest = TRUE))
+}))
+names(ord) <- items
+ord$school <- HolzingerSwineford1939$school
 
-# B-ESEM invariance (ordered, WLSMV + orthogonal target rotation)
-# Matches Mplus ROTATION = TARGET(ORTHOGONAL) multi-group proof
+spec_ord <- specify_model(
+  Visual = c("x1", "x2", "x3"), Textual = c("x4", "x5", "x6"),
+  Speed = c("x7", "x8", "x9"),
+  data = ord, group = "school", ordered = TRUE
+)
 inv_besem <- esem_invariance(spec_ord, model = "besem")
 print(inv_besem)
 }

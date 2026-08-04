@@ -240,7 +240,7 @@ summary.esem_fit <- function(object,
   cat(sprintf("  SRMR = %.3f\n", ws$srmr))
 
   cat("\nStandardised Loadings (STDYX) with rotation-corrected SEs:\n")
-  parameters(object, type = "loadings")
+  print(parameters(object, type = "loadings"))
 
   if (is_besem)
     cat("\nNote: All factor correlations fixed to 0 (orthogonal bifactor).\n")
@@ -353,7 +353,10 @@ coef.esem_fit <- function(object, standardized = FALSE, ...) {
 #'   ANSI codes. Supported in RStudio and most terminals; falls back silently to
 #'   plain output when colour is unavailable. Default \code{TRUE}.
 #'
-#' @return Invisibly returns the parameter table as a data frame.
+#' @return A data frame of class \code{bifactory_parameters} holding the
+#'   standardized parameter table (plus a \code{model} column when \code{x} is
+#'   a pipeline). Printing the object renders the formatted, colour-coded
+#'   table; assign the result to use the values without console output.
 #' @export
 parameters <- function(x,
                        model             = "all",
@@ -361,14 +364,6 @@ parameters <- function(x,
                        suppress          = 0,
                        digits            = 3,
                        highlight_primary = TRUE) {
-
-  .sig_stars <- function(p) {
-    ifelse(is.na(p), "   ",
-    ifelse(p < .001, "***",
-    ifelse(p < .01,  "** ",
-    ifelse(p < .05,  "*  ",
-    ifelse(p < .10,  ".  ", "   ")))))
-  }
 
   # Determine primary items per factor for a fit object.
   # factor_items: optional named list (factor -> character vector of items),
@@ -501,17 +496,15 @@ parameters <- function(x,
     out
   }
 
-  .print_block <- function(tbl, model_label, fit_obj) {
-    cat(sprintf("\n======================================================\n"))
-    cat(sprintf(" %s -- Standardized Parameters (STDYX)\n", model_label))
-    cat(sprintf("======================================================\n"))
-
-    # Print fit indices on one line
+  # Fit indices rendered to a single line while the fit object is in hand;
+  # stored on the returned object so print() needs no access to the fit.
+  .fit_line <- function(fit_obj) {
     ws <- if (inherits(fit_obj, "esem_fit")) fit_obj$wlsmv_stats else NULL
     if (!is.null(ws)) {
-      cat(sprintf(" X2(%g)=%.3f  CFI=%.3f  TLI=%.3f  RMSEA=%.3f  SRMR=%.3f\n",
-                  ws$df, ws$chisq, ws$cfi, ws$tli, ws$rmsea, ws$srmr))
-    } else if (inherits(fit_obj, "esem_fit") || inherits(fit_obj, "lavaan")) {
+      return(sprintf(" X2(%g)=%.3f  CFI=%.3f  TLI=%.3f  RMSEA=%.3f  SRMR=%.3f",
+                     ws$df, ws$chisq, ws$cfi, ws$tli, ws$rmsea, ws$srmr))
+    }
+    if (inherits(fit_obj, "esem_fit") || inherits(fit_obj, "lavaan")) {
       lav <- if (inherits(fit_obj, "esem_fit")) fit_obj$lavaan_fit else fit_obj
       # WLSMV/DWLS/MLR -> .scaled variants (Mplus-matched); plain ML -> plain.
       est_ok <- tryCatch(lavaan::lavInspect(lav, "options")$estimator,
@@ -523,9 +516,100 @@ parameters <- function(x,
         c("chisq","df","cfi","tli","rmsea","srmr")
       fi <- tryCatch(lavaan::fitMeasures(lav, keys), error = function(e) NULL)
       if (!is.null(fi))
-        cat(sprintf(" X2(%g)=%.3f  CFI=%.3f  TLI=%.3f  RMSEA=%.3f  SRMR=%.3f\n",
-                    fi[2], fi[1], fi[3], fi[4], fi[5], fi[6]))
+        return(sprintf(" X2(%g)=%.3f  CFI=%.3f  TLI=%.3f  RMSEA=%.3f  SRMR=%.3f",
+                       fi[2], fi[1], fi[3], fi[4], fi[5], fi[6]))
     }
+    NULL
+  }
+
+  # -- Dispatch ----------------------------------------------------------------
+  if (inherits(x, "esem_comparison_pipeline")) {
+    show <- if (model == "all") c("CFA", "ESEM", "BESEM") else toupper(model)
+    fits <- list(CFA   = x$fit_cfa,
+                 ESEM  = x$fit_esem,
+                 BESEM = x$fit_besem)
+    # spec$factors provides the factor->items map for CFA and ESEM highlighting;
+    # BESEM uses its own specific_factors field and ignores this argument.
+    fi <- if (!is.null(x$spec)) x$spec$factors else NULL
+    blocks <- lapply(show, function(m) {
+      list(tbl     = .params_one(fits[[m]], m, factor_items = fi),
+           label   = m,
+           fitline = .fit_line(fits[[m]]))
+    })
+    out <- do.call(rbind, lapply(blocks, function(b) {
+      t <- b$tbl; t$model <- b$label; t
+    }))
+  } else if (inherits(x, "esem_fit")) {
+    lbl <- if (!is.null(x$call)) deparse(x$call[[1]]) else "Model"
+    # Spec attached by run_comparison() -> use for primary/cross highlighting.
+    # B-ESEM ignores factor_items (uses its own specific_factors instead).
+    fi  <- if (!is.null(x$spec)) x$spec$factors else NULL
+    out <- .params_one(x, lbl, factor_items = fi)
+    blocks <- list(list(tbl = out, label = lbl, fitline = .fit_line(x)))
+  } else if (inherits(x, "ewc_fit")) {
+    # EWC: raw lavaan S4 inside; use spec$factors as the primary-item map so
+    # target loadings get the same blue highlight as ESEM output.
+    fi  <- if (!is.null(x$spec)) x$spec$factors else NULL
+    ewc_label <- if (isTRUE(x$besem)) "B-EWC" else "EWC"
+    out <- .params_one(x$lavaan_fit, ewc_label, factor_items = fi)
+    blocks <- list(list(tbl = out, label = ewc_label,
+                        fitline = .fit_line(x$lavaan_fit)))
+  } else {
+    stop("`x` must be an esem_fit, ewc_fit, or esem_comparison_pipeline ",
+         "object.", call. = FALSE)
+  }
+
+  attr(out, "blocks")            <- blocks
+  attr(out, "digits")            <- digits
+  attr(out, "highlight_primary") <- highlight_primary
+  class(out) <- c("bifactory_parameters", class(out))
+  out
+}
+
+
+#' Print a Parameter Table
+#'
+#' Renders the formatted, colour-coded parameter table produced by
+#' \code{\link{parameters}}. Called automatically when the result of
+#' \code{parameters()} is not assigned.
+#'
+#' @param x A \code{bifactory_parameters} object.
+#' @param ... Ignored.
+#'
+#' @return \code{x}, invisibly.
+#' @export
+print.bifactory_parameters <- function(x, ...) {
+  blocks <- attr(x, "blocks")
+  if (is.null(blocks)) {           # attributes lost (e.g. after subsetting)
+    print.data.frame(x, ...)
+    return(invisible(x))
+  }
+  digits            <- attr(x, "digits")
+  highlight_primary <- attr(x, "highlight_primary")
+
+  .sig_stars <- function(p) {
+    ifelse(is.na(p), "   ",
+    ifelse(p < .001, "***",
+    ifelse(p < .01,  "** ",
+    ifelse(p < .05,  "*  ",
+    ifelse(p < .10,  ".  ", "   ")))))
+  }
+
+  # Detect ANSI colour support: RStudio sets RSTUDIO env var; also check TERM
+  use_colour <- isTRUE(highlight_primary) && (
+    nzchar(Sys.getenv("RSTUDIO")) ||
+    (!identical(Sys.getenv("TERM"), "dumb") && nzchar(Sys.getenv("TERM"))) ||
+    isTRUE(getOption("bifactory.ansi_colour"))
+  )
+  col_on  <- if (use_colour) "\033[34m" else ""  # blue for primary loadings
+  col_off <- if (use_colour) "\033[0m"  else ""
+
+  for (b in blocks) {
+    tbl <- b$tbl
+    cat(sprintf("\n======================================================\n"))
+    cat(sprintf(" %s -- Standardized Parameters (STDYX)\n", b$label))
+    cat(sprintf("======================================================\n"))
+    if (!is.null(b$fitline)) cat(b$fitline, "\n", sep = "")
 
     cat(sprintf("\n  %-10s  %-12s  %*s  %*s  %6s  %6s\n",
                 "Factor", "Item",
@@ -537,15 +621,6 @@ parameters <- function(x,
                 digits + 4, "-------",
                 digits + 3, "-----",
                 "------", "------"))
-
-    # Detect ANSI colour support: RStudio sets RSTUDIO env var; also check TERM
-    use_colour <- highlight_primary && (
-      nzchar(Sys.getenv("RSTUDIO")) ||
-      (!identical(Sys.getenv("TERM"), "dumb") && nzchar(Sys.getenv("TERM"))) ||
-      isTRUE(getOption("bifactory.ansi_colour"))
-    )
-    col_on  <- if (use_colour) "\033[34m" else ""  # blue for primary loadings
-    col_off <- if (use_colour) "\033[0m"  else ""
 
     for (fac in unique(tbl$factor)) {
       rows <- tbl[tbl$factor == fac, , drop = FALSE]
@@ -572,44 +647,8 @@ parameters <- function(x,
       }
       cat("\n")
     }
-    invisible(tbl)
   }
-
-  # -- Dispatch ----------------------------------------------------------------
-  if (inherits(x, "esem_comparison_pipeline")) {
-    show <- if (model == "all") c("CFA", "ESEM", "BESEM") else toupper(model)
-    fits <- list(CFA   = x$fit_cfa,
-                 ESEM  = x$fit_esem,
-                 BESEM = x$fit_besem)
-    # spec$factors provides the factor->items map for CFA and ESEM highlighting;
-    # BESEM uses its own specific_factors field and ignores this argument.
-    fi <- if (!is.null(x$spec)) x$spec$factors else NULL
-    all_tbls <- lapply(show, function(m) {
-      tbl <- .params_one(fits[[m]], m, factor_items = fi)
-      .print_block(tbl, m, fits[[m]])
-    })
-    invisible(do.call(rbind, mapply(function(t, m) { t$model <- m; t },
-                                   all_tbls, show, SIMPLIFY = FALSE)))
-  } else if (inherits(x, "esem_fit")) {
-    lbl <- if (!is.null(x$call)) deparse(x$call[[1]]) else "Model"
-    # Spec attached by run_comparison() -> use for primary/cross highlighting.
-    # B-ESEM ignores factor_items (uses its own specific_factors instead).
-    fi  <- if (!is.null(x$spec)) x$spec$factors else NULL
-    tbl <- .params_one(x, lbl, factor_items = fi)
-    .print_block(tbl, lbl, x)
-    invisible(tbl)
-  } else if (inherits(x, "ewc_fit")) {
-    # EWC: raw lavaan S4 inside; use spec$factors as the primary-item map so
-    # target loadings get the same blue highlight as ESEM output.
-    fi  <- if (!is.null(x$spec)) x$spec$factors else NULL
-    ewc_label <- if (isTRUE(x$besem)) "B-EWC" else "EWC"
-    tbl <- .params_one(x$lavaan_fit, ewc_label, factor_items = fi)
-    .print_block(tbl, ewc_label, x$lavaan_fit)
-    invisible(tbl)
-  } else {
-    stop("`x` must be an esem_fit, ewc_fit, or esem_comparison_pipeline ",
-         "object.", call. = FALSE)
-  }
+  invisible(x)
 }
 
 
@@ -629,15 +668,16 @@ parameters <- function(x,
 #' @return A \code{lavaan} object.
 #'
 #' @examples
-#' \dontrun{
-#' fit <- esem(mydata, nfactors = 3)
+#' data("HolzingerSwineford1939", package = "lavaan")
+#' d <- HolzingerSwineford1939[, paste0("x", 1:9)]
+#'
+#' \donttest{
+#' fit <- esem(d, nfactors = 3)
 #' lav <- lavaan_fit(fit)
 #'
-#' # Use semPlot
-#' semPlot::semPaths(lav, whatLabels = "std", layout = "tree")
-#'
-#' # Use lavaan::lavInspect
+#' # Inspect the underlying lavaan model
 #' lavaan::lavInspect(lav, "cor.lv")   # factor correlations
+#' lavaan::fitMeasures(lav, c("cfi", "rmsea"))
 #' }
 #'
 #' @export

@@ -167,18 +167,9 @@
 
   # -- Multi-start optimisation -----------------------------------------------
   best_val <- Inf; best_par <- NULL
-  # Seed local to this call (restored on exit) so multi-start is reproducible
-  # without disturbing the caller's RNG stream.
-  old_seed <- if (exists(".Random.seed", envir = .GlobalEnv))
-                get(".Random.seed", envir = .GlobalEnv) else NULL
-  on.exit({
-    if (!is.null(old_seed))
-      assign(".Random.seed", old_seed, envir = .GlobalEnv)
-    else
-      suppressWarnings(rm(".Random.seed", envir = .GlobalEnv))
-  }, add = TRUE)
-  set.seed(42L)
-  for (s in seq_len(n_starts)) {
+  # Seed scoped to this block via withr (RNG state restored afterwards) so
+  # multi-start is reproducible without disturbing the caller's RNG stream.
+  withr::with_seed(42L, for (s in seq_len(n_starts)) {
     if (s == 1L && !is.null(fa_init)) {
       # First start: use factanal/EM solution (warm start)
       L0   <- unclass(fa_init$loadings)
@@ -201,7 +192,7 @@
     if (!is.null(res) && is.finite(res$objective) && res$objective < best_val) {
       best_val <- res$objective; best_par <- res$par
     }
-  }
+  })
   if (is.null(best_par)) stop(".fiml_efa: all starts failed", call. = FALSE)
 
   # -- Extract solution -------------------------------------------------------
@@ -353,6 +344,8 @@
 #'
 #' @examples
 #' \dontrun{
+#' # Reads a polychoric matrix from a Mplus .out file (SAMPSTAT output),
+#' # so it needs a .out produced by a licensed Mplus run.
 #' R_mplus <- parse_mplus_polychoric(
 #'   "path/to/besem_measurement.out"
 #' )
@@ -509,9 +502,9 @@ parse_mplus_polychoric <- function(out_file) {
   heywood_lambdas <- L_stdyx[hw_mask]
 
   # -- 3. Report detection ----------------------------------------------------
-  cat("\nHeywood case(s) detected -- standardised loading(s) above 1.0:\n")
+  message("\nHeywood case(s) detected -- standardised loading(s) above 1.0:")
   for (k in seq_along(heywood_lambdas))
-    cat(sprintf("  %-6s-> %-12s lam = %.3f\n",
+    message(sprintf("  %-6s-> %-12s lam = %.3f",
                 heywood_factors[k],
                 indicators[heywood_pairs[k, 1L]],
                 heywood_lambdas[k]))
@@ -526,7 +519,7 @@ parse_mplus_polychoric <- function(out_file) {
   # -- 4. Reconstruct unrotated loadings via Cholesky -------------------------
   # L_rot = L_unrot  x  T^{-1}, Phi_rot = T  x  T'
   # Therefore: L_unrot = L_rot  x  t(chol(Phi_rot))
-  cat("\nRe-rotating via GPArotation (bypassing lavaan rotation)...\n")
+  message("\nRe-rotating via GPArotation (bypassing lavaan rotation)...")
   Phi_chol <- t(chol(Phi_rot))
   L_unrot  <- L_rot %*% Phi_chol
 
@@ -584,7 +577,7 @@ parse_mplus_polychoric <- function(out_file) {
       vapply(still_above, function(it) sprintf("%s = %.2f", it, cur_target[it]),
              character(1L)),
       collapse = ", ")
-    cat(sprintf("  Targets -> %s\n", tgt_str))
+    message(sprintf("  Targets -> %s", tgt_str))
 
     # Use targetT for orthogonal, targetQ for oblique
     # Note: "T$" regex must not match "target" (oblique) -- only explicit "targetT"
@@ -593,7 +586,7 @@ parse_mplus_polychoric <- function(out_file) {
     rot <- tryCatch(
       rot_fn(L_unrot, Target = tmat),
       error = function(e) {
-        cat("  GPArotation failed:", conditionMessage(e), "\n")
+        message(paste("  GPArotation failed:", conditionMessage(e)))
         NULL
       })
     if (is.null(rot)) break
@@ -630,7 +623,7 @@ parse_mplus_polychoric <- function(out_file) {
       # Acceptance threshold 0.994: ensures lam rounds to <1.00 at 2-dp display
       # (APA) while leaving a buffer below the 0.9995 3-dp boundary.
       if (is.na(lam) || lam >= 0.994) {
-        cat(sprintf("  %-6s-> %-12s lam = %.3f  still >= 0.994\n",
+        message(sprintf("  %-6s-> %-12s lam = %.3f  still >= 0.994",
                     pf_name, item, lam))
         still_above_next <- c(still_above_next, item)
         # Step toward zero, preserving sign
@@ -643,7 +636,7 @@ parse_mplus_polychoric <- function(out_file) {
           cur_target[item] <- new_t
         }
       } else {
-        cat(sprintf("  %-6s-> %-12s lam = %.3f  resolved\n",
+        message(sprintf("  %-6s-> %-12s lam = %.3f  resolved",
                     pf_name, item, lam))
         resolved_at_round[item] <- round
       }
@@ -652,11 +645,11 @@ parse_mplus_polychoric <- function(out_file) {
     still_above <- still_above_next
 
     if (length(still_above) == 0L) {
-      cat("\nAll Heywood case(s) resolved. Corrected rotation accepted.\n")
+      message("\nAll Heywood case(s) resolved. Corrected rotation accepted.")
       break
     }
     if (floor_hit) {
-      cat("Stopping: target floor (0.10) reached. Returning best attempt.\n")
+      message("Stopping: target floor (0.10) reached. Returning best attempt.")
       break
     }
   }

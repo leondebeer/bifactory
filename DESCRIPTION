@@ -1,46 +1,41 @@
 Package: bifactory
 Title: (Bifactor) ESEM with Continuous (MLR) or Ordered (WLSMV) Data
-Version: 0.5.0
-Authors@R:
+Version: 0.5.1
+Authors@R: 
     person(given  = "Leon T.",
            family = "De Beer",
            email  = "leondb@gmail.com",
            role   = c("aut", "cre"))
-Description: Fits bifactor Exploratory Structural Equation Models (B-ESEM),
-    together with standard ESEM and Confirmatory Factor Analysis (CFA), for
-    continuous and ordered-categorical data. Continuous models use 'lavaan'
-    native 'efa()' blocks (MLR). Ordered-categorical ESEM defaults to 'lavaan'
-    WLSMV; ordered B-ESEM uses a custom diagonally weighted least squares
-    (DWLS) path with polychoric correlations from 'psych', rotation-delta
-    standard errors via 'numDeriv', and a mean- and variance-adjusted
-    chi-square. Target, geomin, and oblimin rotations use 'GPArotation'; the
-    bifactor ESEM approach follows Morin, Arens and Marsh (2016)
-    <doi:10.1080/10705511.2014.961800>. Additional features include
-    multi-group measurement invariance (configural through strict, with
-    partial invariance), ESEM-within-CFA conversion, McDonald's omega
-    reliability suite, and the Mehrvarz and Rouder (2026)
-    <doi:10.31234/osf.io/95enc_v3> alignment ratio check for ICM-CFA
-    misspecification. An optional 'MplusAutomation' interface allows
-    side-by-side comparison with 'Mplus' output.
+Description: Fits bifactor exploratory structural equation models (B-ESEM),
+    together with standard exploratory structural equation modeling (ESEM)
+    and confirmatory factor analysis (CFA), for continuous and
+    ordered-categorical data. Continuous models use 'lavaan' native efa()
+    blocks with robust maximum likelihood (MLR) estimation.
+    Ordered-categorical ESEM defaults to the 'lavaan' weighted least squares
+    mean- and variance-adjusted (WLSMV) estimator; ordered B-ESEM uses a
+    custom diagonally weighted least squares (DWLS) path with polychoric
+    correlations from 'psych', rotation-delta standard errors via 'numDeriv',
+    and a mean- and variance-adjusted chi-square. Target, geomin, and oblimin
+    rotations use 'GPArotation'; the bifactor ESEM approach follows Morin,
+    Arens and Marsh (2016) <doi:10.1080/10705511.2014.961800>. Additional
+    features include multi-group measurement invariance (configural through
+    strict, with partial invariance), ESEM-within-CFA conversion, McDonald's
+    omega reliability suite, and the Mehrvarz and Rouder (2026)
+    <doi:10.31234/osf.io/95enc_v3> alignment ratio check for independent
+    cluster model confirmatory factor analysis (ICM-CFA) misspecification.
+    An optional 'MplusAutomation' interface allows side-by-side comparison
+    with 'Mplus' output.
 License: AGPL-3
 URL: https://github.com/leondebeer/bifactory
 BugReports: https://github.com/leondebeer/bifactory/issues
 Encoding: UTF-8
-Depends:
-    R (>= 4.1.0)
-Imports:
-    lavaan (>= 0.6-21),
-    GPArotation,
-    psych,
-    MASS,
-    numDeriv,
-    stats,
-    utils,
-    graphics,
-    methods
-Suggests:
-    MplusAutomation,
-    openxlsx2,
-    testthat (>= 3.0.0)
+Depends: R (>= 4.1.0)
+Imports: lavaan (>= 0.6-21), GPArotation, psych, MASS, numDeriv, stats,
+        utils, graphics, methods, withr
+Suggests: MplusAutomation, openxlsx2, testthat (>= 3.0.0)
 Config/testthat/edition: 3
-RoxygenNote: 7.3.3
+Config/roxygen2/version: 8.0.0
+NeedsCompilation: no
+Packaged: 2026-07-05 15:07:07 UTC; leond
+Author: Leon T. De Beer [aut, cre]
+Maintainer: Leon T. De Beer <leondb@gmail.com>

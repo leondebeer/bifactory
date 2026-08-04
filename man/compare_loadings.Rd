@@ -29,16 +29,23 @@ z-scores, p-values, and R \eqn{-} Mplus differences for every loading
 \code{NA} when no Mplus results are present in the pipeline object.
 }
 \examples{
-\dontrun{
-results <- run_comparison(spec, mplus_folder = "path/to/mplus")
+data("HolzingerSwineford1939", package = "lavaan")
+
+spec <- specify_model(
+  Visual  = c("x1", "x2", "x3"),
+  Textual = c("x4", "x5", "x6"),
+  Speed   = c("x7", "x8", "x9"),
+  data    = HolzingerSwineford1939,
+  label   = "Holzinger-Swineford"
+)
+
+\donttest{
+results <- run_comparison(spec, n_starts = 5L)
 lc <- compare_loadings(results)
 head(lc)
 
-# Primary loadings only
+# Primary loadings only (Mplus_* columns are NA without a Mplus run)
 lc[lc$loading_type == "primary", ]
-
-# Largest absolute R - Mplus differences
-lc[order(abs(lc$diff_std), decreasing = TRUE), ]
 }
 
 }

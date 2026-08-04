@@ -84,19 +84,32 @@
 #'   \code{\link{besem_ordered}} for bifactor ordered ESEM.
 #'
 #' @examples
-#' \dontrun{
+#' data("HolzingerSwineford1939", package = "lavaan")
+#'
+#' # Derive ordered (5-category Likert) versions of the 9 continuous items
+#' items <- paste0("x", 1:9)
+#' ord <- as.data.frame(lapply(HolzingerSwineford1939[, items], function(v) {
+#'   as.integer(cut(v, breaks = quantile(v, probs = seq(0, 1, 0.2)),
+#'                  include.lowest = TRUE))
+#' }))
+#' names(ord) <- items
+#'
 #' tgt <- make_target(
-#'   list(EX = items_EX, MD = items_MD, CI = items_CI),
-#'   item_names = all_items
+#'   list(Visual = c("x1", "x2", "x3"),
+#'        Textual = c("x4", "x5", "x6"),
+#'        Speed = c("x7", "x8", "x9")),
+#'   item_names = items
 #' )
 #'
+#' \donttest{
 #' fit_ord <- esem_ordered(
-#'   data         = Rdata,
+#'   data         = ord,
 #'   nfactors     = 3,
-#'   indicators   = all_items,
+#'   indicators   = items,
 #'   rotation     = "target",
 #'   target       = tgt,
-#'   factor_names = c("EX","MD","CI")
+#'   factor_names = c("Visual", "Textual", "Speed"),
+#'   n_starts     = 5L
 #' )
 #'
 #' summary(fit_ord, fit.measures = TRUE, standardized = TRUE)
@@ -316,21 +329,13 @@ esem_ordered <- function(data,
     # Key: normalize=FALSE matches lavaan's row.weights="none" for target rotation.
     # Using Kaiser normalization (normalize=TRUE) causes a systematic loading gap.
     message("Stage 5: Oblique targetQ rotation via GPArotation (", n_starts, " random starts)...")
-    # Seed local to this call (restored on exit) so random-start rotation is
-    # reproducible without disturbing the caller's RNG stream.
-    old_seed <- if (exists(".Random.seed", envir = .GlobalEnv))
-                  get(".Random.seed", envir = .GlobalEnv) else NULL
-    on.exit({
-      if (!is.null(old_seed))
-        assign(".Random.seed", old_seed, envir = .GlobalEnv)
-      else
-        suppressWarnings(rm(".Random.seed", envir = .GlobalEnv))
-    }, add = TRUE)
-    set.seed(42L)
+    # Seed scoped to this block via withr (RNG state restored afterwards) so
+    # random-start rotation is reproducible without disturbing the caller's
+    # RNG stream.
     best_fn  <- Inf
     best_rot <- NULL
 
-    for (s in seq_len(n_starts)) {
+    withr::with_seed(42L, for (s in seq_len(n_starts)) {
       if (s == 1L) {
         L_start <- L_unrot
       } else {
@@ -350,7 +355,7 @@ esem_ordered <- function(data,
         best_fn  <- fn_s
         best_rot <- rot_s
       }
-    }
+    })
 
     if (is.null(best_rot))
       stop("targetQ rotation failed on all ", n_starts, " starts.", call. = FALSE)
@@ -781,12 +786,25 @@ esem_ordered <- function(data,
 #'   \code{\link{run_comparison}}
 #'
 #' @examples
-#' \dontrun{
+#' data("HolzingerSwineford1939", package = "lavaan")
+#'
+#' # Derive ordered (5-category Likert) versions of the 9 continuous items
+#' items <- paste0("x", 1:9)
+#' ord <- as.data.frame(lapply(HolzingerSwineford1939[, items], function(v) {
+#'   as.integer(cut(v, breaks = quantile(v, probs = seq(0, 1, 0.2)),
+#'                  include.lowest = TRUE))
+#' }))
+#' names(ord) <- items
+#'
+#' \donttest{
 #' fit_b_ord <- besem_ordered(
-#'   data = Rdata,
+#'   data = ord,
 #'   specific_factors = list(
-#'     EX = items_EX, MD = items_MD, CI = items_CI
-#'   )
+#'     Visual  = c("x1", "x2", "x3"),
+#'     Textual = c("x4", "x5", "x6"),
+#'     Speed   = c("x7", "x8", "x9")
+#'   ),
+#'   n_starts = 5L
 #' )
 #' summary(fit_b_ord, fit.measures = TRUE, standardized = TRUE)
 #' }
@@ -1083,22 +1101,14 @@ besem_ordered <- function(data,
     # The composite rotation of the best start is stored as best_Th for Stage 6.
     message("Stage 5: Bifactor targetT rotation via GPArotation (",
             n_starts, " random starts)...")
-    # Seed local to this call (restored on exit) so random-start rotation is
-    # reproducible without disturbing the caller's RNG stream.
-    old_seed <- if (exists(".Random.seed", envir = .GlobalEnv))
-                  get(".Random.seed", envir = .GlobalEnv) else NULL
-    on.exit({
-      if (!is.null(old_seed))
-        assign(".Random.seed", old_seed, envir = .GlobalEnv)
-      else
-        suppressWarnings(rm(".Random.seed", envir = .GlobalEnv))
-    }, add = TRUE)
-    set.seed(42L)   # reproducible random starts
+    # Seed scoped to this block via withr (RNG state restored afterwards) so
+    # random-start rotation is reproducible without disturbing the caller's
+    # RNG stream.
     best_fn  <- Inf
     best_rot <- NULL
     best_Th  <- diag(k)   # composite rotation of winning start (for Stage 6)
 
-    for (s in seq_len(n_starts)) {
+    withr::with_seed(42L, for (s in seq_len(n_starts)) {
       if (s == 1L) {
         L_start <- L_unrot          # deterministic: identity start
         T0      <- diag(k)
@@ -1124,7 +1134,7 @@ besem_ordered <- function(data,
         best_rot <- rot_s
         best_Th  <- T0 %*% rot_s$Th   # composite: random pre-rotation + refinement
       }
-    }
+    })
 
     if (is.null(best_rot))
       stop("targetT rotation failed on all ", n_starts, " starts.", call. = FALSE)

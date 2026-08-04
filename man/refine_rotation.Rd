@@ -39,7 +39,9 @@ better rotation is adopted. This is methodologically sound because:
 }
 \examples{
 \dontrun{
-results <- run_comparison(spec, mplus_folder = "path/to/mplus")
+# Requires run_comparison() results that include a Mplus rotation reference
+# (results$mplus_results non-NULL), so a licensed Mplus install is needed.
+results <- run_comparison(spec, mplus_folder = tempfile("mplus_"))
 results <- refine_rotation(results)
 omega   <- compute_omega(results)
 print(omega)

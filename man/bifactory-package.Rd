@@ -15,8 +15,21 @@ Estimator paths differ by data type and model; see \code{?esem}, \code{?besem},
 \code{?esem_ordered}, and \code{?besem_ordered}. Validation summary:
 \code{system.file("VALIDATION.md", package = "bifactory")}.
 }
+\seealso{
+Useful links:
+\itemize{
+  \item \url{https://github.com/leondebeer/bifactory}
+  \item Report bugs at \url{https://github.com/leondebeer/bifactory/issues}
+}
+
+}
 \author{
 \strong{Maintainer}: Leon T. De Beer \email{leondb@gmail.com}
+
+Authors:
+\itemize{
+  \item Leon T. De Beer \email{leondb@gmail.com}
+}
 
 }
 \keyword{internal}

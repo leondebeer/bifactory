@@ -50,32 +50,32 @@ automatically fits CFA, ESEM, and B-ESEM in R, optionally runs all
 three in Mplus, and returns a comparison table plus all fitted objects.
 }
 \examples{
-\dontrun{
+data("HolzingerSwineford1939", package = "lavaan")
+
 spec <- specify_model(
-  EX = c("batEX1","batEX2","batEX3","batEX4",
-         "batEX5","batEX6","batEX7","batEX8"),
-  MD = c("batMD1","batMD2","batMD3","batMD4","batMD5"),
-  CI = c("batCI1","batCI2","batCI3","batCI4","batCI5"),
-  data  = Rdata,
-  label = "Burnout Battery"
+  Visual  = c("x1", "x2", "x3"),
+  Textual = c("x4", "x5", "x6"),
+  Speed   = c("x7", "x8", "x9"),
+  data    = HolzingerSwineford1939,
+  label   = "Holzinger-Swineford"
 )
 
-# R only
-results <- run_comparison(spec)
-print(results)
-
-# R + Mplus
-results <- run_comparison(
-  spec,
-  mplus_folder = "path/to/mplus_output"
-)
+\donttest{
+# Fit CFA, ESEM, and B-ESEM in R and build the comparison table
+results <- run_comparison(spec, n_starts = 5L)
 print(results)
 
 # Access individual fits
 summary(results$fit_esem, fit.measures = TRUE, standardized = TRUE)
 std_loadings(results$fit_besem, suppress = 0.10)
 factor_correlations(results$fit_esem)
-plot(results$alignment)
+}
+
+\dontrun{
+# Also run all three models in Mplus and compare side by side.
+# Requires a licensed Mplus installation reachable via `mplus_command`.
+results <- run_comparison(spec, mplus_folder = tempfile("mplus_"))
+print(results)
 }
 
 }

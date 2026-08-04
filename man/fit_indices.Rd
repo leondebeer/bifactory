@@ -26,10 +26,20 @@ computed from the scaled chi-square via non-central chi-squared inversion
 (MacCallum, Browne & Sugawara, 1996).
 }
 \examples{
-\dontrun{
+data("HolzingerSwineford1939", package = "lavaan")
+d <- HolzingerSwineford1939[, paste0("x", 1:9)]
+
+\donttest{
+fit_e <- esem(d, nfactors = 3)
+fit_b <- besem(d, specific_factors = list(
+  Visual  = c("x1", "x2", "x3"),
+  Textual = c("x4", "x5", "x6"),
+  Speed   = c("x7", "x8", "x9")
+), n_starts = 5L)
+
 noquote(rbind(
-  ESEM  = fit_indices(results$fit_esem),
-  BESEM = fit_indices(results$fit_besem)
+  ESEM  = fit_indices(fit_e),
+  BESEM = fit_indices(fit_b)
 ))
 }
 }

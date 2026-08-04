@@ -83,14 +83,19 @@
 #'   \code{\link{esem_ordered}}
 #'
 #' @examples
-#' \dontrun{
+#' data("HolzingerSwineford1939", package = "lavaan")
+#'
 #' spec <- specify_model(
-#'   EX = items_EX, MD = items_MD, CI = items_CI,
-#'   data  = Rdata,
-#'   group = "sex",
-#'   label = "Burnout Battery"
+#'   Visual  = c("x1", "x2", "x3"),
+#'   Textual = c("x4", "x5", "x6"),
+#'   Speed   = c("x7", "x8", "x9"),
+#'   data  = HolzingerSwineford1939,
+#'   group = "school",
+#'   label = "Holzinger-Swineford"
 #' )
 #'
+#' \donttest{
+#' # Continuous ESEM measurement invariance across schools
 #' inv <- esem_invariance(spec)
 #' print(inv)
 #'
@@ -98,18 +103,21 @@
 #' summary(inv$models$strong, fit.measures = TRUE, standardized = TRUE)
 #' lavaan::lavTestScore(inv$models$strong$lavaan_fit)
 #'
-#' # Ordered data (WLSMV)
-#' spec_ord <- specify_model(
-#'   EX = items_EX, MD = items_MD, CI = items_CI,
-#'   data    = Rdata,
-#'   group   = "sex",
-#'   ordered = TRUE,
-#'   label   = "Burnout Battery (Ordered)"
-#' )
-#' inv_ord <- esem_invariance(spec_ord)
+#' # Ordered data (WLSMV) and B-ESEM invariance follow the same pattern:
+#' # add `ordered = TRUE` to specify_model(), then optionally `model = "besem"`.
+#' items <- paste0("x", 1:9)
+#' ord <- as.data.frame(lapply(HolzingerSwineford1939[, items], function(v) {
+#'   as.integer(cut(v, breaks = quantile(v, probs = seq(0, 1, 0.2)),
+#'                  include.lowest = TRUE))
+#' }))
+#' names(ord) <- items
+#' ord$school <- HolzingerSwineford1939$school
 #'
-#' # B-ESEM invariance (ordered, WLSMV + orthogonal target rotation)
-#' # Matches Mplus ROTATION = TARGET(ORTHOGONAL) multi-group proof
+#' spec_ord <- specify_model(
+#'   Visual = c("x1", "x2", "x3"), Textual = c("x4", "x5", "x6"),
+#'   Speed = c("x7", "x8", "x9"),
+#'   data = ord, group = "school", ordered = TRUE
+#' )
 #' inv_besem <- esem_invariance(spec_ord, model = "besem")
 #' print(inv_besem)
 #' }
@@ -152,10 +160,10 @@ esem_invariance <- function(spec,
     recode <- .collapse_empty_cats(spec$data, spec$all_items, spec$group)
     if (length(recode$recoded) > 0L) {
       if (verbose) {
-        cat("  [NOTE] Empty response categories in >=1 group -- collapsing to nearest non-empty:\n")
+        message("  [NOTE] Empty response categories in >=1 group -- collapsing to nearest non-empty:")
         for (it in names(recode$recoded)) {
           m <- recode$recoded[[it]]
-          cat(sprintf("    %-10s: %s\n", it,
+          message(sprintf("    %-10s: %s", it,
                       paste0(names(m), "->", as.character(m), collapse = ", ")))
         }
       }
@@ -185,17 +193,17 @@ esem_invariance <- function(spec,
   model_label <- if (model == "besem") "B-ESEM" else "ESEM"
 
   if (verbose) {
-    cat("======================================================\n")
-    cat(sprintf(" %s Measurement Invariance: %s\n", model_label, spec$label))
-    cat(
+    message("======================================================")
+    message(sprintf(" %s Measurement Invariance: %s", model_label, spec$label))
+    message(paste(
       " Group:", spec$group,
       " (", length(spec$group_levels), "groups:",
-      paste(spec$group_levels, collapse = ", "), ")\n"
-    )
-    cat(
-      " Estimator:", if (is_ordered) "WLSMV (ordered/categorical)" else paste0(spec$estimator_esem, " (continuous)"), "\n"
-    )
-    cat("======================================================\n\n")
+      paste(spec$group_levels, collapse = ", "), ")"
+    ))
+    message(paste(
+      " Estimator:", if (is_ordered) "WLSMV (ordered/categorical)" else paste0(spec$estimator_esem, " (continuous)")
+    ))
+    message("======================================================\n")
   }
 
   # Scope notice: the lavaan B-ESEM invariance path has been validated against
@@ -228,7 +236,7 @@ esem_invariance <- function(spec,
   fits <- list()
   for (lv in levels) {
     if (verbose)
-      cat(sprintf("  Fitting %-22s", paste0(labels[lv], " ...")))
+      message(sprintf("  Fitting %-22s", paste0(labels[lv], " ...")))
 
     fit <- tryCatch(
       .fit_invariance_model(
@@ -261,9 +269,9 @@ esem_invariance <- function(spec,
 
     if (verbose) {
       if (is.null(fit)) {
-        cat(" FAILED\n")
+        message(" FAILED")
       } else {
-        cat(if (isTRUE(conv)) " OK\n" else " WARNING (did not converge)\n")
+        message(if (isTRUE(conv)) " OK" else " WARNING (did not converge)")
       }
     }
 
@@ -277,23 +285,23 @@ esem_invariance <- function(spec,
     # single-group fit.
     if (model == "besem" && lv == "configural" && !isTRUE(conv)) {
       if (verbose) {
-        cat("\n")
-        cat("  -------------------------------------------------------\n")
-        cat("  B-ESEM configural did not converge after 7 retries.\n")
-        cat("  Falling back to ESEM (n_factors - 1, no general factor).\n")
-        cat("\n")
-        cat("  WARNING: ESEM is structurally NOT equivalent to B-ESEM:\n")
-        cat("    - ESEM has k specific factors only.\n")
-        cat("    - B-ESEM has k specific factors + 1 general factor.\n")
-        cat("    - df / chi2 will differ by k * (n_items) per group.\n")
-        cat("    - Direct numerical comparison vs Mplus B-ESEM is invalid.\n")
-        cat("\n")
-        cat("  Suggested next steps:\n")
-        cat("    1. Reduce n_groups (the convergence problem grows with groups).\n")
-        cat("    2. Inspect single-group fits per country to find the failing one.\n")
-        cat("    3. Run Mplus directly via run_comparison(..., mplus_folder=...) to\n")
-        cat("       cross-check the lavaan retry sequence.\n")
-        cat("  -------------------------------------------------------\n\n")
+        message("")
+        message("  -------------------------------------------------------")
+        message("  B-ESEM configural did not converge after 7 retries.")
+        message("  Falling back to ESEM (n_factors - 1, no general factor).")
+        message("")
+        message("  WARNING: ESEM is structurally NOT equivalent to B-ESEM:")
+        message("    - ESEM has k specific factors only.")
+        message("    - B-ESEM has k specific factors + 1 general factor.")
+        message("    - df / chi2 will differ by k * (n_items) per group.")
+        message("    - Direct numerical comparison vs Mplus B-ESEM is invalid.")
+        message("")
+        message("  Suggested next steps:")
+        message("    1. Reduce n_groups (the convergence problem grows with groups).")
+        message("    2. Inspect single-group fits per country to find the failing one.")
+        message("    3. Run Mplus directly via run_comparison(..., mplus_folder=...) to")
+        message("       cross-check the lavaan retry sequence.")
+        message("  -------------------------------------------------------\n")
       }
       warning(
         "B-ESEM configural did not converge in lavaan after 7 retries. Falling back ",
@@ -488,13 +496,13 @@ print.esem_invariance <- function(x, ...) {
 
   # Attempt 0: default lavaan settings (tight rel.tol = 1e-10, check.gradient = TRUE).
   # Best fit quality if it converges; matches non-invariance esem/besem behaviour.
-  if (verbose) cat("\n    [attempt 0/", length(.CONV_RETRY_SEQ), "] default ...", sep = "")
+  if (verbose) message("\n    [attempt 0/", length(.CONV_RETRY_SEQ), "] default ...")
   fit <- tryCatch(fit_fn(ctrl = NULL, opts = NULL), error = function(e) {
-    if (verbose) cat(sprintf(" [lavaan ERROR] %s", conditionMessage(e)))
+    if (verbose) message(sprintf(" [lavaan ERROR] %s", conditionMessage(e)))
     NULL
   })
   if (.inv_converged(fit)) {
-    if (verbose) cat(" OK")
+    if (verbose) message(" OK")
     return(fit)
   }
 
@@ -504,17 +512,17 @@ print.esem_invariance <- function(x, ...) {
   for (i in seq_along(.CONV_RETRY_SEQ)) {
     a <- .CONV_RETRY_SEQ[[i]]
     if (verbose)
-      cat(sprintf("\n    [attempt %d/%d] %s ...", i, n_retry, a$label))
+      message(sprintf("\n    [attempt %d/%d] %s ...", i, n_retry, a$label))
 
     fit <- tryCatch(
       suppressMessages(fit_fn(ctrl = a$ctrl, opts = a$opts)),
       error = function(e) NULL
     )
     if (.inv_converged(fit)) {
-      if (verbose) cat(" OK")
+      if (verbose) message(" OK")
       return(fit)
     }
-    if (verbose) cat(" failed")
+    if (verbose) message(" failed")
   }
 
   stop(
@@ -889,9 +897,9 @@ print.esem_invariance <- function(x, ...) {
     do.call(lavaan::cfa, cfa_args),
     error = function(e) {
       # Print the generated syntax so it can be inspected when debugging crashes.
-      cat("\n--- [DEBUG] B-ESEM model syntax that caused the error ---\n")
-      cat(model_syntax, "\n")
-      cat("--- [END DEBUG] ---\n")
+      message("\n--- [DEBUG] B-ESEM model syntax that caused the error ---")
+      message(model_syntax)
+      message("--- [END DEBUG] ---")
       stop("B-ESEM efa() WLSMV failed: ", conditionMessage(e), call. = FALSE)
     }
   ))
@@ -1033,9 +1041,9 @@ print.esem_invariance <- function(x, ...) {
   fit <- .muffle_rotated_vcov(tryCatch(
     do.call(lavaan::cfa, cfa_args),
     error = function(e) {
-      cat("\n--- [DEBUG] ESEM model syntax that caused the error ---\n")
-      cat(model_syntax, "\n")
-      cat("--- [END DEBUG] ---\n")
+      message("\n--- [DEBUG] ESEM model syntax that caused the error ---")
+      message(model_syntax)
+      message("--- [END DEBUG] ---")
       stop("ESEM efa() WLSMV failed: ", conditionMessage(e), call. = FALSE)
     }
   ))
@@ -1107,9 +1115,9 @@ print.esem_invariance <- function(x, ...) {
   fit <- .muffle_rotated_vcov(tryCatch(
     do.call(lavaan::cfa, cfa_args),
     error = function(e) {
-      cat("\n--- [DEBUG] B-ESEM MLR syntax that caused the error ---\n")
-      cat(model_syntax, "\n")
-      cat("--- [END DEBUG] ---\n")
+      message("\n--- [DEBUG] B-ESEM MLR syntax that caused the error ---")
+      message(model_syntax)
+      message("--- [END DEBUG] ---")
       stop("B-ESEM MLR CFA failed: ", conditionMessage(e), call. = FALSE)
     }
   ))
@@ -1392,10 +1400,11 @@ print.esem_invariance <- function(x, ...) {
 #'
 #' @examples
 #' \dontrun{
+#' # Requires a licensed Mplus installation reachable via `mplus_command`.
 #' inv <- esem_invariance(spec, model = "besem")
 #' cmp <- run_mplus_besem_invariance(
 #'   inv,
-#'   output_folder = "mplus_inv/",
+#'   output_folder = tempfile("mplus_inv_"),
 #'   mplus_command = "C:/Program Files/Mplus/mplus.exe",
 #'   group_labels  = c("1" = "MALE", "2" = "FEMALE")
 #' )
@@ -1449,7 +1458,7 @@ run_mplus_besem_invariance <- function(inv,
   # prepareMplusData writes a headerless space-delimited file
   MplusAutomation::prepareMplusData(df_out, filename = dat_path, overwrite = TRUE,
                                      inpfile = FALSE)
-  cat("  Data written:", dat_path, "\n")
+  message(paste("  Data written:", dat_path))
 
   is_ordered <- !is.null(spec$ordered) && length(spec$ordered) > 0
 
@@ -1531,9 +1540,9 @@ run_mplus_besem_invariance <- function(inv,
   # -- Generate .inp, run, and retry on non-convergence (per level) -------------
   # WLSMV: run in order so DIFFTEST chain works.
   # ML: DIFFTEST is WLSMV-only; chi-square differences are computed by subtraction.
-  cat("\n  Running Mplus (4 models)...\n")
+  message("\n  Running Mplus (4 models)...")
   for (lv in levels) {
-    cat(sprintf("    %-12s ...", lv))
+    message(sprintf("    %-12s ...", lv))
 
     full_thresh  <- lv %in% c("strong", "strict")
     strict_model <- lv == "strict"
@@ -1668,29 +1677,29 @@ run_mplus_besem_invariance <- function(inv,
     MplusAutomation::runModels(target = inp_paths[lv], Mplus_command = mplus_command,
                                 showOutput = FALSE, replaceOutfile = "always")
 
-    if (.mplus_converged(out_path)) { cat("  OK\n"); next }
+    if (.mplus_converged(out_path)) { message("  OK"); next }
 
     # If .out has a hard ERROR (syntax/spec), retrying won't help
     if (file.exists(out_path) &&
         any(grepl("\\*\\*\\* ERROR", readLines(out_path, warn = FALSE)))) {
-      cat("  ERROR\n"); next
+      message("  ERROR"); next
     }
 
     # Attempts 1-7: progressively relaxed convergence (mirrors R .fit_with_retry)
     converged_mplus <- FALSE
     for (i in seq_along(.MPLUS_CONV_RETRY)) {
       conv <- .MPLUS_CONV_RETRY[i]
-      cat(sprintf("\n      [retry %d/7 conv=%.4f] ...", i, conv))
+      message(sprintf("\n      [retry %d/7 conv=%.4f] ...", i, conv))
       writeLines(make_inp(conv), inp_paths[lv])
       MplusAutomation::runModels(target = inp_paths[lv], Mplus_command = mplus_command,
                                   showOutput = FALSE, replaceOutfile = "always")
       if (.mplus_converged(out_path)) {
-        cat("  OK\n")
+        message("  OK")
         converged_mplus <- TRUE
         break
       }
     }
-    if (!converged_mplus) cat("  FAILED (all retries exhausted)\n")
+    if (!converged_mplus) message("  FAILED (all retries exhausted)")
   }
 
   # -- Read .out files ---------------------------------------------------------
@@ -1731,21 +1740,21 @@ run_mplus_besem_invariance <- function(inv,
   })
   cmp <- do.call(rbind, rows)
 
-  cat("\n==============================================================\n")
-  cat(" B-ESEM Invariance: R vs Mplus (d = R - Mplus)\n")
-  cat("==============================================================\n\n")
+  message("\n==============================================================")
+  message(" B-ESEM Invariance: R vs Mplus (d = R - Mplus)")
+  message("==============================================================\n")
 
   .f3 <- function(x) ifelse(is.na(x), "   NA  ", formatC(round(x,3), format="f", digits=3, width=7))
   .fi <- function(x) ifelse(is.na(x), "  NA ", formatC(round(x,0),  format="d", width=5))
 
-  cat(sprintf("%-20s %7s %7s %7s  %5s %5s %5s  %6s %6s %7s  %6s %6s %7s  %6s %6s %7s  %6s %6s %7s\n",
+  message(sprintf("%-20s %7s %7s %7s  %5s %5s %5s  %6s %6s %7s  %6s %6s %7s  %6s %6s %7s  %6s %6s %7s",
     "Level","chi2_R","chi2_M","dchi2","df_R","df_M","ddf",
     "CFI_R","CFI_M","dCFI","TLI_R","TLI_M","dTLI",
     "RMS_R","RMS_M","dRMS","SRM_R","SRM_M","dSRM"))
-  cat(strrep("-", 142), "\n")
+  message(strrep("-", 142))
   for (i in seq_len(nrow(cmp))) {
     r <- cmp[i, ]
-    cat(sprintf("%-20s %7s %7s %7s  %5s %5s %5s  %6s %6s %7s  %6s %6s %7s  %6s %6s %7s  %6s %6s %7s\n",
+    message(sprintf("%-20s %7s %7s %7s  %5s %5s %5s  %6s %6s %7s  %6s %6s %7s  %6s %6s %7s  %6s %6s %7s",
       r$Level,
       .f3(r$chi2_R), .f3(r$chi2_M), .f3(r$dchi2),
       .fi(r$df_R),   .fi(r$df_M),   .fi(r$ddf),
@@ -1754,7 +1763,7 @@ run_mplus_besem_invariance <- function(inv,
       .f3(r$RMS_R),  .f3(r$RMS_M),  .f3(r$dRMS),
       .f3(r$SRM_R),  .f3(r$SRM_M),  .f3(r$dSRM)))
   }
-  cat("\n  d = R - Mplus. Target: |d| <= 0.001\n\n")
+  message("\n  d = R - Mplus. Target: |d| <= 0.001\n")
 
   invisible(cmp)
 }

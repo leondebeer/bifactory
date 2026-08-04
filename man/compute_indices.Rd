@@ -48,12 +48,18 @@ For each **subscale** (items of specific factor \eqn{F_s}):
 }
 }
 \examples{
-\dontrun{
-spec    <- specify_model(EX = paste0("batEX", 1:8),
-                         MD = paste0("batMD", 1:5),
-                         CI = paste0("batCI", 1:5),
-                         data = mydata, ordered = TRUE)
-results <- run_comparison(spec)
+data("HolzingerSwineford1939", package = "lavaan")
+
+spec <- specify_model(
+  Visual  = c("x1", "x2", "x3"),
+  Textual = c("x4", "x5", "x6"),
+  Speed   = c("x7", "x8", "x9"),
+  data    = HolzingerSwineford1939,
+  label   = "Holzinger-Swineford"
+)
+
+\donttest{
+results <- run_comparison(spec, n_starts = 5L)
 indices <- compute_indices(results)
 print(indices)
 }

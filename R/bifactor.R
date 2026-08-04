@@ -103,15 +103,18 @@
 #'   \code{\link{generate_mplus_besem_syntax}} for Mplus comparison.
 #'
 #' @examples
-#' \dontrun{
+#' data("HolzingerSwineford1939", package = "lavaan")
+#' d <- HolzingerSwineford1939[, paste0("x", 1:9)]
+#'
+#' \donttest{
 #' fit_b <- besem(
-#'   data = Rdata,
+#'   data = d,
 #'   specific_factors = list(
-#'     EX = c("batEX1","batEX2","batEX3","batEX4",
-#'            "batEX5","batEX6","batEX7","batEX8"),
-#'     MD = c("batMD1","batMD2","batMD3","batMD4","batMD5"),
-#'     CI = c("batCI1","batCI2","batCI3","batCI4","batCI5")
-#'   )
+#'     Visual  = c("x1", "x2", "x3"),
+#'     Textual = c("x4", "x5", "x6"),
+#'     Speed   = c("x7", "x8", "x9")
+#'   ),
+#'   n_starts = 5L
 #' )
 #'
 #' summary(fit_b, fit.measures = TRUE, standardized = TRUE)
@@ -119,9 +122,9 @@
 #' factor_correlations(fit_b) # should all be ~0 (orthogonal)
 #'
 #' # Compare B-ESEM vs standard ESEM
-#' fit_esem <- esem(Rdata, nfactors = 3, ...)
-#' lavaan::fitMeasures(lavaan_fit(fit_b),   c("cfi","rmsea","aic"))
-#' lavaan::fitMeasures(lavaan_fit(fit_esem), c("cfi","rmsea","aic"))
+#' fit_esem <- esem(d, nfactors = 3)
+#' lavaan::fitMeasures(lavaan_fit(fit_b),    c("cfi", "rmsea", "aic"))
+#' lavaan::fitMeasures(lavaan_fit(fit_esem), c("cfi", "rmsea", "aic"))
 #' }
 #'
 #' @importFrom lavaan cfa
@@ -239,20 +242,11 @@ besem <- function(data,
   if (!is.null(group_equal)) cfa_args$group.equal  <- group_equal
   cfa_args <- c(cfa_args, list(...))
 
-  # Seed local to this call (restored on exit) so random-start rotation is
-  # reproducible without disturbing the caller's RNG stream.
-  old_seed <- if (exists(".Random.seed", envir = .GlobalEnv))
-                get(".Random.seed", envir = .GlobalEnv) else NULL
-  on.exit({
-    if (!is.null(old_seed))
-      assign(".Random.seed", old_seed, envir = .GlobalEnv)
-    else
-      suppressWarnings(rm(".Random.seed", envir = .GlobalEnv))
-  }, add = TRUE)
-  set.seed(42L)
-
+  # Seed scoped to this call via withr (RNG state restored afterwards) so
+  # random-start rotation is reproducible without disturbing the caller's
+  # RNG stream.
   fit <- tryCatch(
-    do.call(lavaan::cfa, cfa_args),
+    withr::with_seed(42L, do.call(lavaan::cfa, cfa_args)),
     error = function(e) {
       stop("lavaan::cfa() failed for B-ESEM:\n  ", conditionMessage(e),
            "\n\nCheck lavaan >= 0.6-12 and that indicators are correctly specified.",

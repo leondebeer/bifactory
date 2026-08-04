@@ -23,15 +23,16 @@ Use \code{lavaan::lavTestScore()}, \code{lavaan::lavInspect()}, etc. only when
 that slot represents the model you intend to analyse.
 }
 \examples{
-\dontrun{
-fit <- esem(mydata, nfactors = 3)
+data("HolzingerSwineford1939", package = "lavaan")
+d <- HolzingerSwineford1939[, paste0("x", 1:9)]
+
+\donttest{
+fit <- esem(d, nfactors = 3)
 lav <- lavaan_fit(fit)
 
-# Use semPlot
-semPlot::semPaths(lav, whatLabels = "std", layout = "tree")
-
-# Use lavaan::lavInspect
+# Inspect the underlying lavaan model
 lavaan::lavInspect(lav, "cor.lv")   # factor correlations
+lavaan::fitMeasures(lav, c("cfi", "rmsea"))
 }
 
 }

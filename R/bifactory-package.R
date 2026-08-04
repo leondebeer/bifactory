@@ -10,7 +10,7 @@
 #'
 #' @keywords internal
 #' @importFrom stats complete.cases cor cov factanal na.omit nlminb pchisq
-#'   pnorm rnorm runif sd setNames uniroot
+#' @importFrom stats pnorm rnorm runif sd setNames uniroot
 #' @importFrom utils combn write.csv file.edit
 #' @importFrom graphics abline legend par plot plot.new title
 #' @importFrom methods getMethod isGeneric existsMethod

@@ -24,9 +24,23 @@
 #'   \code{delta}.
 #'
 #' @examples
-#' \dontrun{
-#' inv <- esem_invariance(spec, model = "besem")
+#' data("HolzingerSwineford1939", package = "lavaan")
+#'
+#' spec <- specify_model(
+#'   Visual  = c("x1", "x2", "x3"),
+#'   Textual = c("x4", "x5", "x6"),
+#'   Speed   = c("x7", "x8", "x9"),
+#'   data  = HolzingerSwineford1939,
+#'   group = "school"
+#' )
+#'
+#' \donttest{
+#' inv <- esem_invariance(spec)
 #' chisq_decomp(inv)
+#' }
+#'
+#' \dontrun{
+#' # Supply a folder of Mplus .out files to add side-by-side deltas.
 #' chisq_decomp(inv, mplus_dir = "validation/_bfi_g4_mplus_inv")
 #' }
 #' @export

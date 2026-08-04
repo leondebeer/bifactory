@@ -30,6 +30,8 @@ caused by differences in the polychoric estimators.
 }
 \examples{
 \dontrun{
+# Reads a polychoric matrix from a Mplus .out file (SAMPSTAT output),
+# so it needs a .out produced by a licensed Mplus run.
 R_mplus <- parse_mplus_polychoric(
   "path/to/besem_measurement.out"
 )

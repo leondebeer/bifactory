@@ -29,12 +29,13 @@ factor scores, and optional multi-group invariance) using
 # Find the template path
 system.file("templates", "template.R", package = "bifactory")
 
-\dontrun{
-# Open in editor
-bifactory_template()
+# Copy the template to a file (here a temporary one)
+dest <- file.path(tempdir(), "my_analysis.R")
+bifactory_template(to = dest, overwrite = TRUE)
 
-# Copy to the working directory
-bifactory_template(to = "my_analysis.R")
+\dontrun{
+# Open the template directly in your editor (interactive session only)
+bifactory_template()
 }
 
 }

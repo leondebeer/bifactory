@@ -176,19 +176,32 @@ solution. Prefer \code{std_loadings(x)} for reported loadings in that case.
 }
 
 \examples{
-\dontrun{
+data("HolzingerSwineford1939", package = "lavaan")
+
+# Derive ordered (5-category Likert) versions of the 9 continuous items
+items <- paste0("x", 1:9)
+ord <- as.data.frame(lapply(HolzingerSwineford1939[, items], function(v) {
+  as.integer(cut(v, breaks = quantile(v, probs = seq(0, 1, 0.2)),
+                 include.lowest = TRUE))
+}))
+names(ord) <- items
+
 tgt <- make_target(
-  list(EX = items_EX, MD = items_MD, CI = items_CI),
-  item_names = all_items
+  list(Visual = c("x1", "x2", "x3"),
+       Textual = c("x4", "x5", "x6"),
+       Speed = c("x7", "x8", "x9")),
+  item_names = items
 )
 
+\donttest{
 fit_ord <- esem_ordered(
-  data         = Rdata,
+  data         = ord,
   nfactors     = 3,
-  indicators   = all_items,
+  indicators   = items,
   rotation     = "target",
   target       = tgt,
-  factor_names = c("EX","MD","CI")
+  factor_names = c("Visual", "Textual", "Speed"),
+  n_starts     = 5L
 )
 
 summary(fit_ord, fit.measures = TRUE, standardized = TRUE)

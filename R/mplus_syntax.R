@@ -31,22 +31,16 @@
 #'   if \code{output_path} is supplied.
 #'
 #' @examples
-#' \dontrun{
+#' # Pure syntax generation: builds a Mplus .inp string, no Mplus install needed.
 #' syntax <- generate_mplus_syntax(
 #'   factors = list(
-#'     EX = c("batEX1","batEX2","batEX3","batEX4",
-#'            "batEX5","batEX6","batEX7","batEX8"),
-#'     MD = c("batMD1","batMD2","batMD3","batMD4","batMD5"),
-#'     CI = c("batCI1","batCI2","batCI3","batCI4","batCI5")
+#'     Visual  = c("x1", "x2", "x3"),
+#'     Textual = c("x4", "x5", "x6"),
+#'     Speed   = c("x7", "x8", "x9")
 #'   ),
-#'   cfa_factors  = list(Burnout = c("mbiEX1z","mbiEX2z","mbiEX3z",
-#'                                    "mbiEX4z","mbiEX5z")),
-#'   regressions  = c("Burnout ON EX MD CI", "EX MD CI ON sex"),
-#'   covariances  = c("mbiEX1z WITH mbiEX2z"),
-#'   output_path  = file.path(tempdir(), "esem_model.inp")
+#'   output_path = file.path(tempdir(), "esem_model.inp")
 #' )
 #' cat(syntax)
-#' }
 #'
 #' @export
 generate_mplus_syntax <- function(factors,

@@ -478,7 +478,7 @@ summary.ewc_fit <- function(object,
   # When called from inside a function, auto-print is suppressed -- force it.
   print(out)
   if (isTRUE(show_loadings))
-    parameters(object)
+    print(parameters(object))
   invisible(out)
 }
 

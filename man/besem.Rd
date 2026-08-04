@@ -183,15 +183,18 @@ Do not interpret \code{summary(x$lavaan_fit)}, \code{modindices(x)}, or
 }
 
 \examples{
-\dontrun{
+data("HolzingerSwineford1939", package = "lavaan")
+d <- HolzingerSwineford1939[, paste0("x", 1:9)]
+
+\donttest{
 fit_b <- besem(
-  data = Rdata,
+  data = d,
   specific_factors = list(
-    EX = c("batEX1","batEX2","batEX3","batEX4",
-           "batEX5","batEX6","batEX7","batEX8"),
-    MD = c("batMD1","batMD2","batMD3","batMD4","batMD5"),
-    CI = c("batCI1","batCI2","batCI3","batCI4","batCI5")
-  )
+    Visual  = c("x1", "x2", "x3"),
+    Textual = c("x4", "x5", "x6"),
+    Speed   = c("x7", "x8", "x9")
+  ),
+  n_starts = 5L
 )
 
 summary(fit_b, fit.measures = TRUE, standardized = TRUE)
@@ -199,9 +202,9 @@ std_loadings(fit_b)        # rows = items, cols = G + specific factors
 factor_correlations(fit_b) # should all be ~0 (orthogonal)
 
 # Compare B-ESEM vs standard ESEM
-fit_esem <- esem(Rdata, nfactors = 3, ...)
-lavaan::fitMeasures(lavaan_fit(fit_b),   c("cfi","rmsea","aic"))
-lavaan::fitMeasures(lavaan_fit(fit_esem), c("cfi","rmsea","aic"))
+fit_esem <- esem(d, nfactors = 3)
+lavaan::fitMeasures(lavaan_fit(fit_b),    c("cfi", "rmsea", "aic"))
+lavaan::fitMeasures(lavaan_fit(fit_esem), c("cfi", "rmsea", "aic"))
 }
 
 }

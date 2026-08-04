@@ -1,3 +1,32 @@
+# bifactory 0.5.2
+
+This release contains defensive fixes; estimation results are unchanged.
+
+* `parameters()` on a Heywood-corrected ESEM fit now reports `NA` for standard
+  errors, z-values, and p-values when the rotation changed after those
+  quantities were computed, while retaining the corrected standardized
+  loadings.
+* Reliability calculations floor residual variances at 1e-6, preventing a
+  Heywood case from producing a negative residual variance and corrupting the
+  H index.
+* `factor_scores()` now raises an informative error when the polychoric
+  correlation or score-information matrix is singular, instead of exposing a
+  bare `solve()` failure.
+* Heywood retries now recognize the `NA`/0 target convention, so primary cells
+  in targets built that way are freed correctly.
+* B-ESEM sign correction now follows the target column order before orienting
+  loadings, rather than assuming that the general factor is the first column.
+* `factor_scores()` now warns when one pooled polychoric matrix is applied
+  across multiple groups.
+* `esem_ordered()` and `besem_ordered()` now stop with a clear message when
+  supplied item names collide case-insensitively, instead of silently
+  mismatching them.
+* The ECV index now returns `NA` rather than `NaN` for a degenerate all-zero
+  loading matrix.
+* The RMSEA confidence-interval upper bound retries with a wider bracket only
+  when the original search fails, leaving previously published values
+  unchanged when the original search succeeds.
+
 # bifactory 0.5.1
 
 Changes in response to CRAN review (no changes to estimation results):

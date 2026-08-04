@@ -1,6 +1,6 @@
 Package: bifactory
 Title: (Bifactor) ESEM with Continuous (MLR) or Ordered (WLSMV) Data
-Version: 0.5.1
+Version: 0.5.2
 Authors@R: 
     person(given  = "Leon T.",
            family = "De Beer",
@@ -36,6 +36,6 @@ Suggests: MplusAutomation, openxlsx2, testthat (>= 3.0.0)
 Config/testthat/edition: 3
 Config/roxygen2/version: 8.0.0
 NeedsCompilation: no
-Packaged: 2026-07-05 15:07:07 UTC; leond
+Packaged: 2026-08-04 13:54:33 UTC; leond
 Author: Leon T. De Beer [aut, cre]
 Maintainer: Leon T. De Beer <leondb@gmail.com>

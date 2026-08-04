@@ -200,6 +200,11 @@ esem_ordered <- function(data,
         stop("r_obs_override item names do not match indicators.\n",
              "  Missing: ", paste(indicators[is.na(idx)], collapse = ", "),
              call. = FALSE)
+      if (anyDuplicated(idx)) {
+        dup_items <- indicators[duplicated(idx) | duplicated(idx, fromLast = TRUE)]
+        stop("r_obs_override item names collide case-insensitively: ",
+             paste(dup_items, collapse = ", "), call. = FALSE)
+      }
       R_poly <- r_obs_override[idx, idx]
       rownames(R_poly) <- colnames(R_poly) <- indicators
     } else {
@@ -862,6 +867,11 @@ besem_ordered <- function(data,
       stop("r_obs_override item names do not match indicators.\n",
            "  Missing: ", paste(indicators[is.na(idx)], collapse = ", "),
            call. = FALSE)
+    if (anyDuplicated(idx)) {
+      dup_items <- indicators[duplicated(idx) | duplicated(idx, fromLast = TRUE)]
+      stop("r_obs_override item names collide case-insensitively: ",
+           paste(dup_items, collapse = ", "), call. = FALSE)
+    }
     R_poly <- r_obs_override[idx, idx]
     rownames(R_poly) <- colnames(R_poly) <- indicators
     message("  Matched ", length(indicators), " items from supplied matrix.")

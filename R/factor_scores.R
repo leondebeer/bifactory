@@ -54,6 +54,15 @@
 #'   column is prepended automatically for multi-group models.  Rows for
 #'   missing observations contain \code{NA} in all factor columns.
 #'
+#' @details
+#' For multi-group ordered B-ESEM scoring, a single pooled polychoric
+#' correlation matrix is applied to every group. A warning is issued because
+#' scores for non-reference groups may be biased when their correlation
+#' structures differ. If the polychoric correlation matrix or the
+#' score-information matrix is singular, \code{factor_scores()} raises an
+#' informative error identifying the singular matrix rather than exposing a
+#' bare \code{solve()} failure.
+#'
 #' @examples
 #' data("HolzingerSwineford1939", package = "lavaan")
 #' d <- HolzingerSwineford1939[, paste0("x", 1:9)]
@@ -117,7 +126,6 @@ factor_scores <- function(x,
 
   scores
 }
-
 # -- Path 1: Standard lavaan (CFA, ESEM, continuous BESEM) --------------------
 
 .fs_from_lavaan <- function(x, method) {
@@ -225,7 +233,16 @@ factor_scores <- function(x,
   # Note: x$polychoric is the pooled polychoric matrix from Stage 1 of besem_ordered().
   # For multi-group models, this pooled matrix is applied to all groups -- a standard
   # approximation when per-group polychorics are not separately estimated.
-  R_inv     <- solve(R_poly)
+  if (length(raw) > 1L)
+    warning("factor_scores: one pooled polychoric matrix is applied to all groups; ",
+            "scores for non-reference groups may be biased if correlation structures differ.",
+            call. = FALSE)
+  R_inv <- tryCatch(
+    solve(R_poly),
+    error = function(e) stop(
+      "factor_scores: the polychoric correlation matrix is singular; ",
+      "this usually indicates redundant indicators or an ill-conditioned ",
+      "correlation structure.", call. = FALSE))
   A         <- t(Lambda) %*% R_inv %*% Lambda   # k  x  k shared intermediate
 
   # Bartlett: W_bart = solve(A) %*% t(Lambda) %*% R_inv  [k  x  p]
@@ -235,8 +252,18 @@ factor_scores <- function(x,
   # For orthogonal B-ESEM (Phi = I): t(W_bart) == W_reg exactly,
   # so both methods produce identical scores. This is verified in the
   # validation script (test_factor_scores.R, Test 7).
-  W_bart <- solve(A) %*% t(Lambda) %*% R_inv    # k  x  p
-  W_reg  <- R_inv %*% Lambda %*% solve(A)       # p  x  k
+  W_bart <- tryCatch(
+    solve(A) %*% t(Lambda) %*% R_inv,
+    error = function(e) stop(
+      "factor_scores: the score-information matrix A is singular for ",
+      "Bartlett scoring; this usually indicates redundant or unidentified ",
+      "factor loadings.", call. = FALSE))                  # k  x  p
+  W_reg <- tryCatch(
+    R_inv %*% Lambda %*% solve(A),
+    error = function(e) stop(
+      "factor_scores: the score-information matrix A is singular for ",
+      "regression scoring; this usually indicates redundant or unidentified ",
+      "factor loadings.", call. = FALSE))                  # p  x  k
   W      <- if (method == "bartlett") t(W_bart) else W_reg  # always p  x  k
 
   score_group <- function(X_raw) {
@@ -480,4 +507,3 @@ factor_scores <- function(x,
   }
   scores
 }
-

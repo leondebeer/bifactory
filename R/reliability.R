@@ -184,7 +184,7 @@ compute_indices <- function(results) {
     L     <- fit_b$std_rotated_loadings
     gname <- fit_b$g_name %||% colnames(L)[1]
     specs <- setdiff(colnames(L), gname)
-    psi   <- 1 - rowSums(L^2)
+    psi   <- pmax(1 - rowSums(L^2), 1e-6)
     c_vec <- colSums(L)
     total_var <- sum(c_vec^2) + sum(psi)
     H_vals <- sapply(colnames(L), function(f) { r <- sum(L[,f]^2/psi); r/(1+r) })
@@ -212,7 +212,8 @@ compute_indices <- function(results) {
     list(model       = "BESEM",
          omega_total = round(sum(c_vec^2) / total_var, 3),
          omega_h_g   = round(c_vec[gname]^2 / total_var, 3),
-         ecv         = round(sum(L[, gname]^2) / sum(L^2), 3),
+         ecv         = if (sum(L^2) < 1e-14) NA_real_
+                       else round(sum(L[, gname]^2) / sum(L^2), 3),
          puc         = puc,
          H           = round(H_vals, 3),
          subscales   = sub_list)
@@ -260,7 +261,8 @@ compute_indices <- function(results) {
     list(model       = "BESEM_Mplus",
          omega_total = round(sum(c_vec^2) / total_var, 3),
          omega_h_g   = round(c_vec[gname]^2 / total_var, 3),
-         ecv         = round(sum(L[, gname]^2) / sum(L^2), 3),
+         ecv         = if (sum(L^2) < 1e-14) NA_real_
+                       else round(sum(L[, gname]^2) / sum(L^2), 3),
          puc         = puc,
          H           = round(H_vals, 3),
          subscales   = sub_list)
@@ -297,7 +299,8 @@ compute_indices <- function(results) {
     list(model       = "BESEM",
          omega_total = round(sum(c_vec^2) / total_var, 3),
          omega_h_g   = round(c_vec[gname]^2 / total_var, 3),
-         ecv         = round(sum(L[, gname]^2) / sum(L^2), 3),
+         ecv         = if (sum(L^2) < 1e-14) NA_real_
+                       else round(sum(L[, gname]^2) / sum(L^2), 3),
          puc         = puc,
          H           = round(H_vals, 3),
          subscales   = sub_list)

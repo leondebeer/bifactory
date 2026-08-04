@@ -36,9 +36,18 @@ plain output when colour is unavailable. Default \code{TRUE}.}
 }
 \value{
 A data frame of class \code{bifactory_parameters} holding the
-  standardized parameter table (plus a \code{model} column when \code{x} is
-  a pipeline). Printing the object renders the formatted, colour-coded
-  table; assign the result to use the values without console output.
+  standardized parameter table. Its columns are \code{factor}, \code{item},
+  \code{std}, \code{se}, \code{z}, \code{p}, and \code{loading_type}; a
+  \code{model} column is added when \code{x} is a pipeline. With
+  \code{type = "all"}, rows for residual variances and thresholds are also
+  included. Printing the object renders the formatted, colour-coded table;
+  assign the result to use the values without console output.
+
+On a Heywood-corrected fit, the rotation changed after the standard errors
+were computed. Consequently, \code{se}, \code{z}, and \code{p} are
+\code{NA}, while the corrected standardized loadings in \code{std} are
+retained. When \code{suppress > 0}, rows whose \code{z} is \code{NA} are
+dropped, as are rows below the suppression threshold.
 }
 \description{
 Prints a formatted parameter table -- standardized loadings, standard errors,

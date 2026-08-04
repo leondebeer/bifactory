@@ -273,6 +273,14 @@ besem <- function(data,
   # Sign correction: flip columns so primary loadings sum positive.
   # Apply the same flips to the unstandardized matrix so the two stay in sync.
   if (!is.null(cached)) {
+    if (!is.null(colnames(cached$L)) && !is.null(colnames(tgt)) &&
+        all(colnames(tgt) %in% colnames(cached$L))) {
+      cached$L  <- cached$L[, colnames(tgt), drop = FALSE]
+      cached$SE <- cached$SE[, colnames(tgt), drop = FALSE]
+      if (!is.null(L_rot_unstd) && !is.null(colnames(L_rot_unstd)) &&
+          all(colnames(tgt) %in% colnames(L_rot_unstd)))
+        L_rot_unstd <- L_rot_unstd[, colnames(tgt), drop = FALSE]
+    }
     for (j in seq_len(ncol(cached$L))) {
       prim_idx <- if (j == 1L) seq_len(nrow(cached$L)) else which(tgt[, j] == 1)
       if (sum(cached$L[prim_idx, j], na.rm = TRUE) < 0) {

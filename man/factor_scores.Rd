@@ -73,6 +73,15 @@ Returns a data frame of estimated latent factor scores, one column per
 factor and one row per observation.  Works with any \code{esem_fit},
 plain \code{lavaan} object, or \code{esem_invariance} result.
 }
+\details{
+For multi-group ordered B-ESEM scoring, a single pooled polychoric
+correlation matrix is applied to every group. A warning is issued because
+scores for non-reference groups may be biased when their correlation
+structures differ. If the polychoric correlation matrix or the
+score-information matrix is singular, \code{factor_scores()} raises an
+informative error identifying the singular matrix rather than exposing a
+bare \code{solve()} failure.
+}
 \examples{
 data("HolzingerSwineford1939", package = "lavaan")
 d <- HolzingerSwineford1939[, paste0("x", 1:9)]

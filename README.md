@@ -1,19 +1,23 @@
 # bifactory
 
-**Mplus-aligned (bifactor) ESEM, CFA, and measurement invariance for continuous and ordered data in R.**
+**Bifactor ESEM, ESEM, and CFA — with multi-group measurement invariance —
+for continuous and ordered data in R.**
 
 `bifactory` fits Exploratory Structural Equation Models (ESEM), bifactor ESEM
 (B-ESEM), and Confirmatory Factor Analysis (CFA), and runs multi-group
-measurement invariance — with numerical output aligned to Mplus conventions. It
-combines EFA-style rotation (via **GPArotation** / **psych**) with structural
-estimation (via **lavaan**), and handles both continuous data (MLR) and
-ordered/Likert data (WLSMV).
+measurement invariance. It combines EFA-style rotation (via **GPArotation** /
+**psych**) with structural estimation (via **lavaan**), and handles both
+continuous data (MLR) and ordered/Likert data (WLSMV).
+
+For the CFA, ESEM and B-ESEM fits, loadings, standard errors and fit indices
+follow Mplus conventions, so a model can be checked against an established
+reference implementation.
 
 The distinctive piece is the **ordered bifactor ESEM** path: a custom diagonally
 weighted least squares (DWLS) routine over polychoric correlations, with an
 orthogonal target rotation, a mean-and-variance-adjusted scaled chi-square, and
-rotation-aware delta-method standard errors — the combination needed to
-reproduce Mplus's `ROTATION = TARGET (ORTHOGONAL)` bifactor solution under WLSMV.
+rotation-aware delta-method standard errors — the combination an orthogonal
+bifactor target rotation requires under WLSMV.
 
 ## Installation
 
@@ -56,7 +60,13 @@ fit_b <- besem_ordered(
   )
 )
 summary(fit_b, fit.measures = TRUE, standardized = TRUE)
-compute_indices(fit_b)        # McDonald's omega suite (omega_H, ECV, PUC, H)
+
+# Reliability and dimensionality indices come from the comparison pipeline,
+# not from a single fit:
+spec    <- specify_model(EX = ex_items, MD = md_items, CI = ci_items,
+                         data = my_items, ordered = TRUE)
+results <- run_comparison(spec)
+compute_indices(results)      # omega, omega_H, ECV, PUC, H, alpha
 ```
 
 ## Measurement invariance
@@ -84,7 +94,7 @@ optimiser can stall on the bifactor target rotation).
 | `esem_ordered()` / `besem_ordered()` | ESEM / bifactor ESEM for ordered data (WLSMV) |
 | `run_comparison()` | Fit CFA, ESEM, and B-ESEM together and compare |
 | `esem_invariance()` | Multi-group configural / weak / strong / strict invariance |
-| `compute_indices()` | McDonald's omega reliability suite |
+| `compute_indices()` | Reliability and dimensionality indices (omega suite, ECV, PUC, H, alpha) |
 | `make_target()` / `make_bifactor_target()` | Target rotation matrices |
 | `alignment_check()` | Pre-fit ICM-CFA misspecification diagnostic |
 | `std_loadings()`, `factor_correlations()`, `parameters()` | Tidy extractors |

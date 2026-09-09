@@ -13,7 +13,7 @@
 }
 \value{
 Invisibly returns \code{x}; called for the side effect of printing
-  the comparison table.
+the comparison table.
 }
 \description{
 Print Method for esem_comparison

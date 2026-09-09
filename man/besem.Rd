@@ -37,7 +37,7 @@ Example: \code{list(EX = c("y1","y2"), MD = c("y3","y4"), CI = c("y5","y6"))}.}
 
 \item{std.lv}{Logical. Fix factor variances to 1. Default \code{TRUE}.}
 
-\item{ordered}{Character vector of ordered-categorical item names.
+\item{ordered}{Character vector of ordinal item names.
 When non-\code{NULL}, routes to \code{\link{besem_ordered}}. For Mplus-aligned
 ordered B-ESEM use \code{method = "rotation"} there (default in
 \code{\link{run_comparison}}).}
@@ -46,7 +46,7 @@ ordered B-ESEM use \code{method = "rotation"} there (default in
 
 \item{group_equal}{Character vector of lavaan equality constraints.}
 
-\item{missing}{Character. Missing data handling for **continuous** B-ESEM.
+\item{missing}{Character. Missing data handling for \strong{continuous} B-ESEM.
 Default \code{"listwise"}. When \code{ordered} is set, passed to
 \code{\link{besem_ordered}} (default \code{"listwise"} there; the pipeline
 passes \code{"pairwise"} from \code{\link{specify_model}} when used via
@@ -62,56 +62,63 @@ Default \code{30L} (matches Mplus).}
 }
 \value{
 An object of class \code{c("besem_fit", "esem_fit")} with the
-  same structure as \code{\link{esem}}, plus:
+same structure as \code{\link{esem}}, plus:
 \describe{
-  \item{\code{g_name}}{Name of the general factor.}
-  \item{\code{specific_factors}}{Named list of specific factor assignments.}
+\item{\code{g_name}}{Name of the general factor.}
+\item{\code{specific_factors}}{Named list of specific factor assignments.}
 }
 }
 \description{
 Fits a Bifactor ESEM model -- a general factor (G) loading on all
 indicators plus domain-specific factors each targeting a subset of
 indicators. All factors are orthogonal (uncorrelated), matching the
-Mplus B-ESEM specification on **continuous** data via lavaan's \code{efa()}
+Mplus B-ESEM specification on \strong{continuous} data via lavaan's \code{efa()}
 block. With \code{ordered} indicators, the call routes to
 \code{\link{besem_ordered}} (default custom DWLS/WLSMV path; see
 \code{?besem_ordered}).
 }
 \details{
-## What makes B-ESEM different from ESEM
+\subsection{What makes B-ESEM different from ESEM}{\tabular{lll}{
+    \tab ESEM \tab B-ESEM \cr
+   Factor structure \tab k oblique specific factors \tab 1 general + k orthogonal specific \cr
+   Factor correlations \tab Freely estimated \tab All fixed to zero (orthogonal) \cr
+   Cross-loadings \tab Estimated via rotation \tab Estimated via orthogonal target rotation \cr
+   G factor \tab None \tab Loads freely on all items \cr
+   Rotation \tab Oblique target/geomin \tab Orthogonal target \cr
+}
 
-| | ESEM | B-ESEM |
-|---|---|---|
-| Factor structure | k oblique specific factors | 1 general + k orthogonal specific |
-| Factor correlations | Freely estimated | All fixed to zero (orthogonal) |
-| Cross-loadings | Estimated via rotation | Estimated via orthogonal target rotation |
-| G factor | None | Loads freely on all items |
-| Rotation | Oblique target/geomin | Orthogonal target |
+}
 
-## Orthogonality
+\subsection{Orthogonality}{
+
 B-ESEM uses orthogonal target rotation (\code{"targetT"} in lavaan),
 which constrains all factors to be uncorrelated. This means:
 \itemize{
-  \item G is uncorrelated with EX, MD, CI
-  \item EX, MD, CI are uncorrelated with each other
+\item G is uncorrelated with EX, MD, CI
+\item EX, MD, CI are uncorrelated with each other
 }
 This matches Mplus \code{ROTATION = TARGET (orthogonal)}.
-
-## Interpreting results
-\itemize{
-  \item **G loadings**: variance shared across all items regardless of domain
-  \item **Specific loadings**: domain-specific variance after accounting for G
-  \item **omega_h (omega hierarchical)**: reliability of G (use \code{psych::omega()})
-  \item **omega_s (omega specific)**: reliability of each specific factor
 }
 
-## Target matrix structure
+\subsection{Interpreting results}{
+
+\itemize{
+\item \strong{G loadings}: variance shared across all items regardless of domain
+\item \strong{Specific loadings}: domain-specific variance after accounting for G
+\item \strong{omega_h (omega hierarchical)}: reliability of G (use \code{psych::omega()})
+\item \strong{omega_s (omega specific)}: reliability of each specific factor
+}
+}
+
+\subsection{Target matrix structure}{
+
 \preformatted{
        G   EX   MD   CI
 y1     1    1    0    0   <- G free on all; EX primary; MD/CI targeted to 0
 y2     1    1    0    0
 y6     1    0    1    0   <- MD item
 y9     1    0    0    1   <- CI item
+}
 }
 }
 \section{Mplus target syntax}{
@@ -131,27 +138,27 @@ MODEL:
 \section{Estimator paths}{
 
 \describe{
-  \item{Continuous ESEM / B-ESEM}{
-    \code{\link{esem}} and \code{\link{besem}} use \code{lavaan::cfa()} with a
-    native \code{efa()} block (integrated MLR estimation and rotation).
-  }
-  \item{Ordered ESEM}{
-    \code{esem(ordered = ...)} calls \code{\link{esem_ordered}}. Default
-    \code{method = "lavaan"} (lavaan WLSMV, \code{efa()} block, post-hoc rotation).
-    \code{method = "rotation"} uses a custom DWLS pipeline (polychoric correlations
-    + \pkg{GPArotation}).
-  }
-  \item{Ordered B-ESEM}{
-    \code{besem(ordered = ...)} calls \code{\link{besem_ordered}}. Default
-    \code{method = "rotation"} (custom DWLS/WLSMV + orthogonal \code{targetT}; this
-    is what \code{\link{run_comparison}} uses for ordered data). \code{method = "set-esem"}
-    fits a lavaan WLSMV bifactor **CFA** with non-primary specific loadings fixed at
-    zero; it does **not** match Mplus B-ESEM loadings.
-  }
-  \item{Multi-group invariance}{
-    \code{\link{esem_invariance}} uses lavaan multi-group \code{efa()} models plus
-    explicit syntax patches for ordered B-ESEM. See that help page for scope limits.
-  }
+\item{Continuous ESEM / B-ESEM}{
+\code{\link{esem}} and \code{\link{besem}} use \code{lavaan::cfa()} with a
+native \code{efa()} block (integrated MLR estimation and rotation).
+}
+\item{Ordered ESEM}{
+\code{esem(ordered = ...)} calls \code{\link{esem_ordered}}. Default
+\code{method = "lavaan"} (lavaan WLSMV, \code{efa()} block, post-hoc rotation).
+\code{method = "rotation"} uses a custom DWLS pipeline (polychoric correlations
++ \pkg{GPArotation}).
+}
+\item{Ordered B-ESEM}{
+\code{besem(ordered = ...)} calls \code{\link{besem_ordered}}. Default
+\code{method = "rotation"} (custom DWLS/WLSMV + orthogonal \code{targetT}; this
+is what \code{\link{run_comparison}} uses for ordered data). \code{method = "set-esem"}
+fits a lavaan WLSMV bifactor \strong{CFA} with non-primary specific loadings fixed at
+zero; it does \strong{not} match Mplus B-ESEM loadings.
+}
+\item{Multi-group invariance}{
+\code{\link{esem_invariance}} uses lavaan multi-group \code{efa()} models plus
+explicit syntax patches for ordered B-ESEM. See that help page for scope limits.
+}
 }
 }
 
@@ -160,12 +167,12 @@ MODEL:
 Defaults differ by entry point; pass \code{missing} explicitly when fitting ESEM and
 B-ESEM separately on the same ordered dataset.
 \itemize{
-  \item \code{\link{specify_model}} / \code{\link{run_comparison}}: \code{"pairwise"}
-    for ordered data, \code{"listwise"} for continuous.
-  \item \code{\link{esem_ordered}}: \code{"pairwise"}.
-  \item \code{\link{besem_ordered}}: \code{"listwise"} (pipeline still passes
-    \code{missing} from the spec when used via \code{run_comparison}).
-  \item \code{\link{esem}} / \code{\link{besem}} (continuous): \code{"listwise"}.
+\item \code{\link{specify_model}} / \code{\link{run_comparison}}: \code{"pairwise"}
+for ordered data, \code{"listwise"} for continuous.
+\item \code{\link{esem_ordered}}: \code{"pairwise"}.
+\item \code{\link{besem_ordered}}: \code{"listwise"} (pipeline still passes
+\code{missing} from the spec when used via \code{run_comparison}).
+\item \code{\link{esem}} / \code{\link{besem}} (continuous): \code{"listwise"}.
 }
 }
 
@@ -173,7 +180,7 @@ B-ESEM separately on the same ordered dataset.
 
 For \code{\link{besem_ordered}(method = "rotation")} and
 \code{\link{esem_ordered}(method = "rotation")}, \code{$lavaan_fit} is often an
-**auxiliary** one-factor WLSMV CFA used only to extract DWLS weight matrices---not
+\strong{auxiliary} one-factor WLSMV CFA used only to extract DWLS weight matrices---not
 the fitted ESEM/B-ESEM model. Use \code{\link{std_loadings}}, \code{\link{parameters}},
 and \code{\link[lavaan:fitMeasures]{fitMeasures}(x)} on the \code{esem_fit} wrapper;
 \code{\link[lavaan:fitMeasures]{fitMeasures}(x)} reads \code{wlsmv_stats} when present.
@@ -210,7 +217,7 @@ lavaan::fitMeasures(lavaan_fit(fit_esem), c("cfi", "rmsea", "aic"))
 }
 \seealso{
 \code{\link{esem}} for standard oblique ESEM,
-  \code{\link{besem_ordered}} for ordered-categorical B-ESEM,
-  \code{\link{make_bifactor_target}} for the target matrix,
-  \code{\link{generate_mplus_besem_syntax}} for Mplus comparison.
+\code{\link{besem_ordered}} for ordinal B-ESEM,
+\code{\link{make_bifactor_target}} for the target matrix,
+\code{\link{generate_mplus_besem_syntax}} for Mplus comparison.
 }

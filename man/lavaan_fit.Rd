@@ -16,7 +16,7 @@ A \code{lavaan} object.
 Returns the raw \code{lavaan} object stored in \code{x$lavaan_fit}. For
 continuous ESEM/B-ESEM and \code{method = "lavaan"} ordered fits, this is the
 fitted model. For \code{\link{besem_ordered}(method = "rotation")} (and
-\code{\link{esem_ordered}(method = "rotation")}), it is often an **auxiliary**
+\code{\link{esem_ordered}(method = "rotation")}), it is often an \strong{auxiliary}
 one-factor CFA used for DWLS weights only---see
 \link[=doc_estimator_paths]{The lavaan_fit slot on custom WLSMV fits}.
 Use \code{lavaan::lavTestScore()}, \code{lavaan::lavInspect()}, etc. only when

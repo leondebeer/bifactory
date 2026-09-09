@@ -12,12 +12,12 @@ fit_indices(fit)
 }
 \value{
 A named character vector with elements \code{"CFI"}, \code{"TLI"},
-  \code{"RMSEA [90\% CIs]"}, and \code{"SRMR"}. Stack rows with
-  \code{rbind()} (wrapped in \code{noquote()}) to build a comparison
-  table.
+\code{"RMSEA [90\% CIs]"}, and \code{"SRMR"}. Stack rows with
+\code{rbind()} (wrapped in \code{noquote()}) to build a comparison
+table.
 }
 \description{
-Returns CFI, TLI, RMSEA (with 90\% CI) and SRMR formatted as a named
+Returns CFI, TLI, RMSEA (with 90\\% CI) and SRMR formatted as a named
 character vector. Uses the \code{.scaled} variants when the fit was
 estimated with MLR/WLSMV, matching Mplus's default output. For B-ESEM /
 ESEM WLSMV fits that carry pre-computed Mplus-matched values in

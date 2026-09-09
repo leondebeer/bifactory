@@ -43,15 +43,15 @@ with the data; above \code{moderate} indicate substantial misspecification.}
 \value{
 An object of class \code{"alignment_check"} (a list) containing:
 \describe{
-  \item{\code{pair_results}}{A \code{data.frame} with one row per factor
-    pair, giving: geometric mean of alignment ratios, log-scale SD, implied phi,
-    CFA-estimated phi (if supplied), inflation percentage, and verdict.}
-  \item{\code{all_ratios}}{A named list of raw alignment ratio vectors,
-    one element per factor pair.}
-  \item{\code{recommendation}}{Character string: overall recommendation.}
-  \item{\code{cor_matrix}}{The manifest correlation matrix used.}
-  \item{\code{clusters}}{Resolved cluster assignments (named list).}
-  \item{\code{call}}{The matched call.}
+\item{\code{pair_results}}{A \code{data.frame} with one row per factor
+pair, giving: geometric mean of alignment ratios, log-scale SD, implied phi,
+CFA-estimated phi (if supplied), inflation percentage, and verdict.}
+\item{\code{all_ratios}}{A named list of raw alignment ratio vectors,
+one element per factor pair.}
+\item{\code{recommendation}}{Character string: overall recommendation.}
+\item{\code{cor_matrix}}{The manifest correlation matrix used.}
+\item{\code{clusters}}{Resolved cluster assignments (named list).}
+\item{\code{call}}{The matched call.}
 }
 }
 \description{
@@ -62,37 +62,42 @@ alignment ratios must be invariant across all admissible item quadruples,
 with the common value equal to the squared latent correlation phi^2.
 }
 \details{
-## Interpreting the log-scale dispersion (sd of log Q)
+\subsection{Interpreting the log-scale dispersion (sd of log Q)}{
+
 \eqn{s = \mathrm{sd}(\log Q)} is the primary diagnostic. The log scale is
 natural because alignment ratios are multiplicative objects. Mehrvarz &
 Rouder (2026, p.24) report empirical terciles of \eqn{s} from their bifactor
 misalignment simulation:
 \itemize{
-  \item \strong{s < 0.64} -- Slight misalignment. ICM-CFA is approximately
-    consistent with the data; latent correlations are roughly trustworthy.
-  \item \strong{s 0.64-1.6} -- Moderate misalignment. ICM-CFA is partially
-    misspecified; interpret latent correlations with caution.
-  \item \strong{s > 1.6} -- High misalignment (top tercile of the paper's
-    simulation, up to ~4.4). ICM-CFA is substantially misspecified and
-    latent correlations are likely inflated. Consider ESEM.
+\item \strong{s < 0.64} -- Slight misalignment. ICM-CFA is approximately
+consistent with the data; latent correlations are roughly trustworthy.
+\item \strong{s 0.64-1.6} -- Moderate misalignment. ICM-CFA is partially
+misspecified; interpret latent correlations with caution.
+\item \strong{s > 1.6} -- High misalignment (top tercile of the paper's
+simulation, up to ~4.4). ICM-CFA is substantially misspecified and
+latent correlations are likely inflated. Consider ESEM.
 }
 These cutpoints are the 33rd and 66th percentiles of \eqn{s} observed by
 Mehrvarz & Rouder across a broad range of simulated loading configurations
 (with \eqn{\mathrm{sd}(\log \kappa_j) \in [0, 3]}), not hard decision
 boundaries; adjust \code{log_sd_thresholds} if your application calls for
 stricter or looser cutoffs.
-
-## Types of misspecification detected
-\itemize{
-  \item \strong{Misassignment}: items are assigned to the wrong cluster.
-    Mehrvarz & Rouder prove this necessarily inflates phi. The alignment
-    ratios split into three plateaus at phi^2, 1, and 1/phi^2.
-  \item \strong{Misalignment}: cluster assignments are correct but
-    cross-loadings exist (or the proportionality constraint is violated in
-    a bifactor-like DGP). The ratios are dispersed rather than invariant.
 }
 
-## Number of alignment ratios per pair
+\subsection{Types of misspecification detected}{
+
+\itemize{
+\item \strong{Misassignment}: items are assigned to the wrong cluster.
+Mehrvarz & Rouder prove this necessarily inflates phi. The alignment
+ratios split into three plateaus at phi^2, 1, and 1/phi^2.
+\item \strong{Misalignment}: cluster assignments are correct but
+cross-loadings exist (or the proportionality constraint is violated in
+a bifactor-like DGP). The ratios are dispersed rather than invariant.
+}
+}
+
+\subsection{Number of alignment ratios per pair}{
+
 Mehrvarz & Rouder (2026, p.14) count one alignment ratio per admissible
 index quadruple: \eqn{n_Q = \binom{m_A}{2}\binom{m_B}{2}}. Because each
 unordered quadruple \eqn{\{\ell, \ell'\} \times \{k, k'\}} admits two
@@ -102,6 +107,7 @@ correctly specified ICM-CFA but diverge under misspecification, this
 function records both matchings per quadruple -- yielding \eqn{2 \binom{m_A}
 {2}\binom{m_B}{2}} ratios in \code{all_ratios} -- to maximise the
 information available for the dispersion diagnostic.
+}
 }
 \section{What are alignment ratios?}{
 
@@ -149,5 +155,5 @@ correlations in confirmatory factor analysis.
 }
 \seealso{
 \code{\link{esem}} for the recommended follow-up under moderate or
-  high misalignment.
+high misalignment.
 }

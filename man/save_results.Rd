@@ -37,16 +37,16 @@ Invisibly returns a character vector of file paths written.
 \description{
 Writes all standard output files to \code{output_folder}:
 \itemize{
-  \item \code{<label>_fit_indices.csv} -- CFI/TLI/RMSEA/SRMR for all models.
-  \item \code{<label>_CFA_loadings.csv} -- standardised loading matrix (wide).
-  \item \code{<label>_ESEM_loadings.csv} -- standardised loading matrix (wide).
-  \item \code{<label>_BESEM_loadings.csv} -- standardised loading matrix (wide).
-  \item \code{<label>_loadings_comparison.csv} -- R vs Mplus loadings, long
-    format with SEs, z-scores, p-values, and \code{diff_std}.
-  \item \code{<label>_omega.csv} -- Reliability indices (if
-    \code{indices} is supplied).
-  \item \code{<label>_results.xlsx} -- Single xlsx workbook with all results
-    (when \code{xlsx = TRUE}).
+\item \code{<label>_fit_indices.csv} -- CFI/TLI/RMSEA/SRMR for all models.
+\item \code{<label>_CFA_loadings.csv} -- standardised loading matrix (wide).
+\item \code{<label>_ESEM_loadings.csv} -- standardised loading matrix (wide).
+\item \code{<label>_BESEM_loadings.csv} -- standardised loading matrix (wide).
+\item \code{<label>_loadings_comparison.csv} -- R vs Mplus loadings, long
+format with SEs, z-scores, p-values, and \code{diff_std}.
+\item \code{<label>_omega.csv} -- Reliability indices (if
+\code{indices} is supplied).
+\item \code{<label>_results.xlsx} -- Single xlsx workbook with all results
+(when \code{xlsx = TRUE}).
 }
 }
 \examples{

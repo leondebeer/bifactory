@@ -21,7 +21,7 @@ standard set: CFI, TLI, RMSEA, SRMR, AIC, BIC.}
 }
 \value{
 A named numeric vector of fit indices (by default CFI, TLI, RMSEA
-  with its confidence interval, SRMR, and, on lavaan paths, AIC and BIC).
+with its confidence interval, SRMR, and, on lavaan paths, AIC and BIC).
 }
 \description{
 Forwards to \code{lavaan::fitMeasures()} when the fit used lavaan's \code{efa()}

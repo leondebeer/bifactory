@@ -15,7 +15,7 @@
 }
 \value{
 Invisibly returns \code{x}; called for the side effect of printing
-  the aligned loading matrices.
+the aligned loading matrices.
 }
 \description{
 Print method for aligned_loadings

@@ -57,6 +57,8 @@
       "=~" = paste0(lhs_clean, " =~ ", rhs),
       "~1" = paste0(lhs_clean, " (intercept)"),
       "|"  = paste0(lhs_clean, " | ", rhs, " (threshold)"),
+      "~~" = if (identical(lhs_clean, rhs)) paste0(lhs_clean, " (residual variance)")
+             else paste0(lhs_clean, " ~~ ", rhs),
       paste0(lhs_clean, " ", op, " ", rhs)
     )
 
@@ -70,6 +72,9 @@
       group_partial_label = gp_label,
       group_name          = grp_name,
       score               = score,
+      item                = lhs_clean,
+      op                  = op,
+      rhs                 = rhs,
       stringsAsFactors    = FALSE
     )
   })
@@ -77,7 +82,8 @@
   results <- do.call(rbind, Filter(Negate(is.null), results))
   if (is.null(results) || nrow(results) == 0L)
     return(data.frame(label=character(), group_partial_label=character(),
-                      group_name=character(), score=numeric()))
+                      group_name=character(), score=numeric(),
+                      item=character(), op=character(), rhs=character()))
 
   results[order(-results$score), ]
 }
@@ -93,7 +99,9 @@
 #'
 #' @param inv An \code{esem_invariance} object from \code{\link{esem_invariance}}.
 #' @param level Character. The invariance level to partially free:
-#'   \code{"weak"}, \code{"strong"}, or \code{"strict"}.
+#'   \code{"strong"} or \code{"strict"}. Partial weak invariance is not
+#'   defined for ESEM: the rotated loading block is constrained across groups
+#'   as a unit, so no single loading can be freed.
 #' @param max_free Integer. Maximum parameters to free before stopping.
 #'   Default 10. Byrne et al. (1989) recommend freeing the minimum number
 #'   -- in practice >5 rarely recovers invariance.
@@ -113,9 +121,23 @@
 #'   \item{\code{$group_partial}}{Character vector: final group.partial labels.}
 #' }
 #'
-#' @section Limitations:
-#' B-ESEM models are not supported. Use
-#' \code{lavaan::lavTestScore(inv$models[[level]]$lavaan_fit)} directly.
+#' @section What can be released:
+#' ESEM and B-ESEM loadings rotate as a block, so partial configural and
+#' partial weak invariance do not exist. Partial strong releases intercepts
+#' (continuous items) or thresholds (ordered items); partial strict releases
+#' residual variances. Constraints are released one at a time, largest score
+#' test first (van de Schoot, Lugtig & Hox, 2012). An intercept or threshold
+#' is released only if every factor the item belongs to keeps at least two
+#' items with invariant intercepts/thresholds (Byrne, Shavelson & Muthen,
+#' 1989), and a warning is issued when more than 20\% of the constraints
+#' added at that level are released (Dimitrov, 2010). The search is data
+#' driven: report every released parameter. On ordered items the search keeps
+#' at least one threshold per item invariant (Millsap & Yun-Tein, 2004); an
+#' item's last threshold can be released by hand through
+#' \code{esem_invariance(..., group.partial = "item|t1")}, which then fixes
+#' the item's residual variance at 1 in every group. A partial refit that
+#' fits worse than the full model (a lavaan local optimum) is retried from
+#' simple starting values.
 #'
 #' @seealso \code{\link{esem_invariance}}
 #' @export
@@ -130,12 +152,11 @@ partial_invariance <- function(inv,
     stop("`inv` must be an esem_invariance object from esem_invariance().",
          call. = FALSE)
 
-  if (!is.null(inv$model) && inv$model == "besem")
-    stop("partial_invariance() is not supported for B-ESEM models. ",
-         "Use lavaan::lavTestScore() on inv$models[[level]]$lavaan_fit directly.",
-         call. = FALSE)
-
-  level <- match.arg(level, c("weak", "strong", "strict"))
+  if (identical(level, "weak"))
+    stop("Partial weak invariance is not defined for ESEM: the rotated loading ",
+         "block is invariant as a unit, so no single loading can be freed. ",
+         "Use level = \"strong\" or level = \"strict\".", call. = FALSE)
+  level <- match.arg(level, c("strong", "strict"))
 
   if (is.null(inv$models[[level]]))
     stop(sprintf("inv$models$%s is NULL -- the original %s model failed to fit.",
@@ -187,6 +208,28 @@ partial_invariance <- function(inv,
   group_partial <- character(0)
   freed_log     <- list()
   converged     <- FALSE
+  # Partial strong releases intercepts/thresholds, partial strict residual
+  # variances: the loadings rotate as a block (Byrne et al., 1989).
+  allowed_ops <- if (level == "strong") c("~1", "|") else "~~"
+  model_arg   <- if (is.null(inv$model)) "esem" else inv$model
+
+  refit <- function(lv, ...) .fit_invariance_model(
+    spec = inv$spec, group_equal = constraints[[lv]], is_ordered = is_ordered,
+    model = model_arg, missing = missing_arg, verbose = FALSE,
+    group.partial = group_partial, ...)
+  x2 <- function(fit) unname(lavaan::fitMeasures(fit$lavaan_fit, "chisq"))
+  # A model with fewer constraints cannot fit worse than the full one; when the
+  # refit does, lavaan stopped in a local optimum (.fit_with_retry() already
+  # tries the default and the simple start and keeps the deeper fit).
+  refit_guarded <- function(lv, full) {
+    fit <- refit(lv)
+    if (is.null(full) || x2(fit) <= x2(full) + 1e-6) return(fit)
+    if (x2(fit) > x2(full) + 1e-6)
+      warning(sprintf(paste0("The partial %s refit fits worse than the full %s model ",
+                             "(chi-square %.1f vs %.1f): local optimum, treat the result ",
+                             "with caution."), lv, lv, x2(fit), x2(full)), call. = FALSE)
+    fit
+  }
 
   if (verbose) {
     message("======================================================")
@@ -199,28 +242,56 @@ partial_invariance <- function(inv,
   # -- 4. Greedy loop ---------------------------------------------------------
   for (round_i in seq_len(max_free)) {
 
-    if (verbose) message(sprintf("  Round %d: running lavTestScore ...", round_i))
+    if (verbose) message(sprintf("  Round %d: scoring the remaining constraints ...", round_i))
 
-    sc <- tryCatch(
-      lavaan::lavTestScore(current_fit$lavaan_fit),
+    # Ordered strict: the residuals are fixed at 1 in every group (theta), not
+    # equality-labelled, so lavTestScore() has nothing to release there; the
+    # modification index of each non-reference residual plays the same role.
+    lbl_df <- tryCatch(
+      if (is_ordered && level == "strict") {
+        .residual_candidates(current_fit$lavaan_fit)
+      } else {
+        sc <- lavaan::lavTestScore(current_fit$lavaan_fit)
+        .parse_score_labels(current_fit$lavaan_fit, sc$uni)
+      },
       error = function(e) {
-        warning(sprintf("lavTestScore() failed in round %d: %s",
+        warning(sprintf("Scoring failed in round %d: %s",
                         round_i, conditionMessage(e)), call. = FALSE)
         NULL
       }
     )
-
-    if (is.null(sc) || is.null(sc$uni) || nrow(sc$uni) == 0L) {
+    if (is.null(lbl_df)) {
       if (verbose) message(" FAILED")
       break
     }
 
-    # Parse labels; exclude already-freed parameters
-    lbl_df <- .parse_score_labels(current_fit$lavaan_fit, sc$uni)
-    lbl_df <- lbl_df[!lbl_df$group_partial_label %in% group_partial, ]
+    # Candidates: the constraints this level may release, not yet released.
+    # At strong an item is released only if every factor it belongs to keeps
+    # at least two items with invariant intercepts/thresholds (Byrne, Shavelson
+    # & Muthen, 1989; van de Schoot, Lugtig & Hox, 2012).
+    lbl_df <- lbl_df[lbl_df$op %in% allowed_ops &
+                     (lbl_df$op != "~~" | lbl_df$item == lbl_df$rhs) &
+                     !lbl_df$group_partial_label %in% group_partial, , drop = FALSE]
+    if (level == "strong" && nrow(lbl_df) > 0L) {
+      freed_items <- sub("[|~].*$", "", group_partial)
+      lbl_df <- lbl_df[vapply(lbl_df$item, .anchors_ok, NA, freed_items,
+                              inv$spec$factors), , drop = FALSE]
+    }
+    if (is_ordered && level == "strong" && nrow(lbl_df) > 0L) {
+      # Keep at least one invariant threshold per item (Millsap & Yun-Tein,
+      # 2004): releasing an item's last threshold would re-fix its residual at
+      # 1 in every group, and the partial model would no longer nest the full
+      # one.  That last step can be taken by hand with group.partial.
+      freed_thr <- sub("\\|.*$", "", grep("|", group_partial, fixed = TRUE, value = TRUE))
+      keep <- vapply(lbl_df$item, function(it) {
+        n_thr <- length(unique(stats::na.omit(inv$spec$data[[it]]))) - 1L
+        sum(freed_thr == it) < n_thr - 1L
+      }, NA)
+      lbl_df <- lbl_df[keep, , drop = FALSE]
+    }
 
     if (nrow(lbl_df) == 0L) {
-      if (verbose) message(" no more constraints to free")
+      if (verbose) message(" no further constraint can be released")
       break
     }
 
@@ -230,17 +301,8 @@ partial_invariance <- function(inv,
     if (verbose) message(sprintf(" freeing %s (score=%.2f) ...",
                              best$label, best$score))
 
-    # Refit with updated group.partial
     new_fit <- tryCatch(
-      .fit_invariance_model(
-        spec          = inv$spec,
-        group_equal   = constraints[[level]],
-        is_ordered    = is_ordered,
-        model         = "esem",
-        missing       = missing_arg,
-        verbose       = FALSE,
-        group.partial = group_partial
-      ),
+      refit_guarded(level, inv$models[[level]]),
       error = function(e) {
         warning(sprintf("Refit failed in round %d: %s",
                         round_i, conditionMessage(e)), call. = FALSE)
@@ -295,6 +357,18 @@ partial_invariance <- function(inv,
     data.frame(round=integer(), label=character(), group_name=character(),
                score=numeric(), delta_cfi=numeric(), converged=logical())
 
+  # Dimitrov (2010): releasing fewer than 20% of a level's constraints is
+  # defensible in practice, provided every released parameter is reported.
+  n_level <- unname(lavaan::fitMeasures(inv$models[[level]]$lavaan_fit, "df") -
+                    lavaan::fitMeasures(baseline_fit$lavaan_fit, "df"))
+  if (length(group_partial) > 0.2 * n_level)
+    warning(sprintf(paste0("%d of the %d constraints added at the %s level were ",
+                           "released, more than 20%% (Dimitrov, 2010): report every ",
+                           "released parameter and interpret the group comparison ",
+                           "with caution."),
+                    length(group_partial), as.integer(round(n_level)), level),
+            call. = FALSE)
+
   # -- 5. Fit downstream levels ------------------------------------------------
   downstream_map <- list(
     weak   = c("strong", "strict"),
@@ -314,15 +388,7 @@ partial_invariance <- function(inv,
     if (verbose) message(sprintf("  Fitting downstream: %s (partial) ...", ds_lv))
 
     ds_fit <- tryCatch(
-      .fit_invariance_model(
-        spec          = inv$spec,
-        group_equal   = constraints[[ds_lv]],
-        is_ordered    = is_ordered,
-        model         = "esem",
-        missing       = missing_arg,
-        verbose       = FALSE,
-        group.partial = group_partial
-      ),
+      refit_guarded(ds_lv, inv$models[[ds_lv]]),
       error = function(e) {
         warning(sprintf("Downstream %s fit failed: %s", ds_lv,
                         conditionMessage(e)), call. = FALSE)
@@ -437,6 +503,8 @@ partial_invariance <- function(inv,
     TLI         = unname(partial_fi["tli"]),
     dTLI        = NA_real_,
     RMSEA       = unname(partial_fi["rmsea"]),
+    RMSEA_lo    = unname(partial_fi["rmsea_lo"]),
+    RMSEA_hi    = unname(partial_fi["rmsea_hi"]),
     dRMSEA      = NA_real_,
     SRMR        = unname(partial_fi["srmr"]),
     dSMR        = NA_real_,
@@ -474,6 +542,8 @@ partial_invariance <- function(inv,
       TLI         = unname(ds_fi["tli"]),
       dTLI        = NA_real_,
       RMSEA       = unname(ds_fi["rmsea"]),
+      RMSEA_lo    = unname(ds_fi["rmsea_lo"]),
+      RMSEA_hi    = unname(ds_fi["rmsea_hi"]),
       dRMSEA      = NA_real_,
       SRMR        = unname(ds_fi["srmr"]),
       dSMR        = NA_real_,
@@ -528,6 +598,9 @@ partial_invariance <- function(inv,
       cat(sprintf("  %-5d  %-30s  %-8s  %9.2f  %+12.3f%s\n",
                   r$round, r$label, r$group_name, r$score, r$delta_cfi, tick))
     }
+    cat("\n  Report every released parameter. Partial invariance keeps at least two\n",
+        "  items per factor with invariant intercepts/thresholds (Byrne, Shavelson\n",
+        "  & Muthen, 1989; van de Schoot, Lugtig & Hox, 2012).\n", sep = "")
   }
 
   chisq_note <- if (is_ordered)
@@ -579,4 +652,35 @@ print.esem_partial_invariance <- function(x, ...) {
   .print_partial_table(x$table, is_ordered, x$freed_params)
 
   invisible(x)
+}
+
+
+# Internal: TRUE when releasing `item`'s intercept/thresholds still leaves at
+# least two items with invariant intercepts/thresholds on every factor the
+# item belongs to (Byrne, Shavelson & Muthen, 1989).
+.anchors_ok <- function(item, freed_items, factors) {
+  freed <- union(freed_items, item)
+  all(vapply(factors, function(f) !(item %in% f) || sum(!(f %in% freed)) >= 2L, NA))
+}
+
+
+# Internal: candidate residual variances for partial strict on ordered items.
+# Under the theta parameterization the strict residuals are fixed at 1 in every
+# group rather than equality-labelled, so lavTestScore() cannot score them;
+# the modification index of each non-reference residual is the same test.
+# Same columns as .parse_score_labels().
+.residual_candidates <- function(lav_fit) {
+  mi <- lavaan::modindices(lav_fit, op = "~~")
+  mi <- mi[mi$lhs == mi$rhs & mi$group > 1L & !is.na(mi$mi), , drop = FALSE]
+  grp_levels <- lavaan::lavInspect(lav_fit, "group.label")
+  out <- data.frame(
+    label               = paste0(mi$lhs, " (residual variance)"),
+    group_partial_label = paste0(mi$lhs, "~~", mi$rhs),
+    group_name          = as.character(grp_levels[mi$group]),
+    score               = mi$mi,
+    item                = mi$lhs,
+    op                  = rep("~~", nrow(mi)),
+    rhs                 = mi$rhs,
+    stringsAsFactors    = FALSE)
+  out[order(-out$score), , drop = FALSE]
 }

@@ -16,7 +16,7 @@ If \code{NULL} (default), plots all pairs in a grid.}
 }
 \value{
 Called for its side effect of drawing the alignment-ratio plot;
-  invisibly returns \code{NULL}.
+invisibly returns \code{NULL}.
 }
 \description{
 Produces a sorted alignment ratio plot (as in Figure 2 of Mehrvarz & Rouder

@@ -14,10 +14,16 @@
 #'   B-ESEM models with orthogonal rotation both methods return identical
 #'   scores (\eqn{\Phi = I}).
 #' @param level Character. Only used when \code{x} is an \code{esem_invariance}
-#'   object.  \code{"auto"} (default) selects the most constrained invariance
-#'   level whose own transition \eqn{\Delta}CFI \eqn{\ge -0.010}.  Override
-#'   with \code{"configural"}, \code{"weak"}, \code{"strong"}, or
-#'   \code{"strict"}.  Silently ignored for plain fit objects.
+#'   object.  \code{"auto"} (default) selects the most constrained fitted
+#'   invariance level whose own transition \eqn{\Delta}CFI \eqn{\ge -0.010},
+#'   including \code{"varcov"} and \code{"means"} when
+#'   \code{esem_invariance()} was run with \code{through}.  Override
+#'   with \code{"configural"}, \code{"weak"}, \code{"strong"},
+#'   \code{"strict"}, \code{"varcov"} or \code{"means"}.  \code{"auto"}
+#'   skips a level whose reported solution
+#'   is inadmissible (a negative variance or a non-positive-definite matrix,
+#'   recorded in \code{inv$notes}) even when its \eqn{\Delta}CFI passes.
+#'   Silently ignored for plain fit objects.
 #' @param dCFI_cutoff Numeric. The \eqn{\Delta}CFI threshold used by
 #'   \code{level = "auto"} to accept an invariance level (a level qualifies
 #'   when its transition \eqn{\Delta}CFI \eqn{\ge} \code{dCFI_cutoff}).
@@ -89,10 +95,11 @@ factor_scores <- function(x,
                           ...) {
   method <- match.arg(method)
 
-  valid_levels <- c("auto", "configural", "weak", "strong", "strict")
+  valid_levels <- c("auto", "configural", "weak", "strong", "strict",
+                    "varcov", "means")
   if (!level %in% valid_levels)
-    stop("level must be one of: auto, configural, weak, strong, strict.",
-         call. = FALSE)
+    stop("level must be one of: auto, configural, weak, strong, strict, ",
+         "varcov, means.", call. = FALSE)
 
   if (!is.numeric(dCFI_cutoff) || length(dCFI_cutoff) != 1L || is.na(dCFI_cutoff))
     stop("dCFI_cutoff must be a single numeric value.", call. = FALSE)
@@ -327,7 +334,9 @@ factor_scores <- function(x,
     configural = "1. Configural",
     weak       = "2. Weak (metric)",
     strong     = "3. Strong (scalar)",
-    strict     = "4. Strict"
+    strict     = "4. Strict",
+    varcov     = "5. Latent var/cov",
+    means      = "6. Latent means"
   )
 
   if (is.null(table))
@@ -357,10 +366,11 @@ factor_scores <- function(x,
     return(list(level = level, fit = fit))
   }
 
-  # Auto-selection: walk strict -> strong -> weak independently
-  # Configural is the unconditional terminal fallback (dCFI is NA -- never tested)
+  # Auto-selection: every fitted level, most constrained first (means, varcov,
+  # strict, strong, weak), each judged on its own transition; configural is the
+  # unconditional terminal fallback (dCFI is NA -- never tested)
   cutoff      <- dCFI_cutoff
-  level_order <- c("strict", "strong", "weak")
+  level_order <- c("means", "varcov", "strict", "strong", "weak")
 
   # Extract dCFI by matching Model label (case-insensitive)
   .get_dcfi <- function(lv) {
@@ -370,20 +380,13 @@ factor_scores <- function(x,
     row$dCFI[1]
   }
 
-  selected <- "configural"
-  for (lv in level_order) {
-    fit    <- models[[lv]]
-    if (is.null(fit)) next          # model failed -- skip
-    dcfi   <- .get_dcfi(lv)
-    if (!is.na(dcfi) && dcfi >= cutoff) {
-      selected <- lv
-      break
-    }
-  }
+  # a level with an inadmissible solution (inv$notes: negative variance, non-PD
+  # matrix) is skipped even when its dCFI passes
+  selected <- .inv_supported_level(table, models, cutoff, inv$notes)
 
   dcfi_selected <- if (selected == "configural") NA_real_ else .get_dcfi(selected)
 
-  if (selected == "configural" && any(!vapply(models[level_order], is.null, logical(1)))) {
+  if (selected == "configural" && any(!vapply(models[intersect(level_order, names(models))], is.null, logical(1)))) {
     warning(sprintf(
       "factor_scores: no invariance level passed the dCFI >= %.4f cutoff. %s",
       cutoff, "Falling back to configural."), call. = FALSE

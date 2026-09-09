@@ -19,7 +19,7 @@
 }
 \value{
 Invisibly returns \code{object}; called for the side effect of
-  printing the model summary.
+printing the model summary.
 }
 \description{
 Prints a full summary for an \code{esem_fit}.  For models fit through the

@@ -16,7 +16,7 @@ Default \code{FALSE}.}
 }
 \value{
 Invisibly returns the path to the template (or the destination
-  when \code{to} is supplied).
+when \code{to} is supplied).
 }
 \description{
 Opens the shipped analysis template in your editor, or copies it to a

@@ -28,7 +28,7 @@ matrices use this column order.}
 }
 \value{
 A named list of matrices, one per group, each with rownames
-  (items) and colnames (factors).
+(items) and colnames (factors).
 }
 \description{
 Convenience helper for use as the \code{target} of

@@ -38,7 +38,7 @@ invisibly if \code{NULL}.}
 }
 \value{
 Mplus syntax string (invisibly). Writes file if \code{output_path}
-  supplied.
+supplied.
 }
 \description{
 Generates the correct Mplus syntax for Bifactor ESEM with orthogonal

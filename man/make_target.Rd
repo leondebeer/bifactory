@@ -26,7 +26,7 @@ cross-loadings toward zero, or \code{NA} to leave them completely free
 }
 \value{
 A numeric matrix (items  x  factors) with row names set to item names
-  and column names set to factor names from \code{keys}.
+and column names set to factor names from \code{keys}.
 }
 \description{
 Constructs a target matrix suitable for use with \code{rotation = "target"}
@@ -35,19 +35,22 @@ value of \code{1} for their primary factor; all other cells are set to
 \code{0} (penalised to be near zero) or \code{NA} (free, no penalty).
 }
 \details{
-## Target vs. Soft Target Rotation
+\subsection{Target vs. Soft Target Rotation}{
+\itemize{
+\item \strong{Hard target} (\code{cross_loading_value = 0}): Cross-loadings are
+penalised toward zero. Use this when you have strong theory.
+\item \strong{Soft target} (\code{cross_loading_value = NA}): Only primary loadings
+are targeted; cross-loadings are completely free. Use this when you are
+less certain about the zero pattern.
+}
+}
 
-- **Hard target** (\code{cross_loading_value = 0}): Cross-loadings are
-  penalised toward zero. Use this when you have strong theory.
-- **Soft target** (\code{cross_loading_value = NA}): Only primary loadings
-  are targeted; cross-loadings are completely free. Use this when you are
-  less certain about the zero pattern.
-
-## Items Loading on Multiple Factors
+\subsection{Items Loading on Multiple Factors}{
 
 An item can appear in multiple \code{keys} entries if it is expected to have
 meaningful loadings on more than one factor. In that case its target value
 will be \code{1} for both factors and \code{cross_loading_value} elsewhere.
+}
 }
 \examples{
 # Simple 15-item, 3-factor target (integer keys)

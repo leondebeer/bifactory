@@ -35,7 +35,20 @@
 #'     \item a numeric matrix (single-group) or list of matrices (multi-group)
 #'       of reference standardized loadings, with rownames = items, colnames
 #'       = factors;
-#'     \item another fit object of compatible structure;
+#'     \item another fit object of compatible structure (an
+#'       \code{esem_invariance} target is read at the same \code{level}). The
+#'       comparison is then made by orientation transfer: the unstandardized
+#'       loadings are rotated to the reference and the factor covariances are
+#'       transformed with the same rotation before standardizing. From the
+#'       weak level on the non-reference groups have free factor covariances,
+#'       and standardizing with the diagonal of \eqn{Q'\Psi_g Q} is not
+#'       rotation-equivariant, so Procrustes alignment of standardized
+#'       matrices leaves a residual there (about 0.01 to 0.02 on
+#'       \code{psych::bfi}) that the transfer removes;
+#'     \item a list with one element per group, each a list with
+#'       \code{lambda} (unstandardized loadings, items x factors), \code{psi}
+#'       (factor covariance matrix) and \code{theta} (residual variances): a
+#'       solution from elsewhere, compared by the same orientation transfer;
 #'     \item \code{"group1"} -- align all groups to the first group's loadings
 #'       within \code{x} (within-fit consistency, no external reference);
 #'     \item \code{"canonical"} (default) -- apply deterministic sign + column
@@ -59,6 +72,8 @@
 #'     \item{residual_max, residual_mean}{max / mean abs residual vs target
 #'       (only when an external reference was supplied)}
 #'   }
+#'   The attribute \code{"method"} is \code{"canonical"}, \code{"procrustes"}
+#'   or \code{"transfer"}.
 #'
 #' @examples
 #' data("HolzingerSwineford1939", package = "lavaan")
@@ -97,8 +112,21 @@ align_loadings <- function(x,
 
   std    <- .extract_loadings_with_se(x, level = level)
   groups <- names(std)
-  tgt    <- .resolve_target(target, std)
+  tgt    <- .resolve_target(target, std, level = level)
   method <- attr(tgt, "method")
+
+  # Orientation transfer (target is a fit or a solution list): rotate the
+  # unstandardized loadings and the factor covariances together, then
+  # standardize.  From the weak level on the loadings are shared, so one Q
+  # (from the first group) serves every group; otherwise Q is per group.
+  if (method == "transfer") {
+    sol <- .extract_solution(x, level = level)
+    shared <- all(vapply(sol, function(s)
+      max(abs(s$lambda - sol[[1]]$lambda)) < 1e-8, logical(1)))
+    tgt <- lapply(groups, function(g) .check_solution_compat(tgt[[g]], sol[[g]]$lambda, group = g))
+    names(tgt) <- groups
+    Q1 <- .procrustes_rotation(sol[[1]]$lambda, tgt[[1]]$lambda)
+  }
 
   out <- vector("list", length(groups))
   names(out) <- groups
@@ -109,19 +137,25 @@ align_loadings <- function(x,
 
     Q <- if (method == "canonical") {
       .canonical_rotation(L_R)
+    } else if (method == "transfer") {
+      if (shared) Q1 else .procrustes_rotation(sol[[g]]$lambda, tgt[[g]]$lambda)
     } else {
       L_T <- .check_target_compat(tgt[[g]], L_R, group = g)
       .procrustes_rotation(L_R, L_T)
     }
 
-    L_aligned  <- L_R %*% Q
+    L_aligned <- if (method == "transfer") {
+      s <- sol[[g]]
+      .stdyx_from_solution(list(lambda = s$lambda %*% Q, psi = t(Q) %*% s$psi %*% Q, theta = s$theta))
+    } else L_R %*% Q
     dimnames(L_aligned) <- dimnames(L_R)
     SE_aligned <- if (se_method == "approx") .se_rotate_approx(SE_R, Q) else NULL
     if (!is.null(SE_aligned)) dimnames(SE_aligned) <- dimnames(SE_R)
 
     res <- list(loadings = L_aligned, se = SE_aligned, Q = Q)
-    if (method == "procrustes" && !is.null(tgt[[g]])) {
-      d <- abs(L_aligned - tgt[[g]])
+    ref <- if (method == "transfer") .stdyx_from_solution(tgt[[g]]) else if (method == "procrustes") tgt[[g]]
+    if (!is.null(ref)) {
+      d <- abs(L_aligned - ref)
       res$residual_max  <- max(d, na.rm = TRUE)
       res$residual_mean <- mean(d, na.rm = TRUE)
     }
@@ -172,9 +206,10 @@ align_loadings <- function(x,
   sqrt(SE_R^2 %*% Q^2)
 }
 
-# Resolve user-facing target argument to a list of per-group reference
-# matrices, plus a "method" attribute = "procrustes" or "canonical".
-.resolve_target <- function(target, std) {
+# Resolve user-facing target argument to a list of per-group references, plus
+# a "method" attribute: "canonical", "procrustes" (standardized matrices) or
+# "transfer" (per-group solutions with lambda / psi / theta).
+.resolve_target <- function(target, std, level = "configural") {
   groups <- names(std)
 
   if (is.character(target) && length(target) == 1L) {
@@ -212,18 +247,88 @@ align_loadings <- function(x,
            ") must match number of groups (", length(groups), ")",
            call. = FALSE)
     if (is.null(names(target))) names(target) <- groups
-    attr(target, "method") <- "procrustes"
+    is_sol <- vapply(target, function(s) is.list(s) && all(c("lambda", "psi", "theta") %in% names(s)), logical(1))
+    attr(target, "method") <- if (all(is_sol)) "transfer" else "procrustes"
     return(target)
   }
 
-  # Treat as another fit -- extract its loadings.
-  ext <- .extract_loadings_with_se(target)
+  # Treat as another fit -- extract its solution (orientation transfer).
+  ext <- .extract_solution(target, level = level)
   if (length(ext) != length(groups))
     stop("Reference fit has ", length(ext), " group(s); current fit has ",
          length(groups), ".", call. = FALSE)
-  out <- lapply(ext, `[[`, "loadings")
-  names(out) <- groups
-  attr(out, "method") <- "procrustes"
+  names(ext) <- groups
+  attr(ext, "method") <- "transfer"
+  ext
+}
+
+# Reorder a reference solution (lambda / psi / theta) to the fit's items and
+# factors; errors through .check_target_compat() when the structure differs.
+.check_solution_compat <- function(s, L_R, group) {
+  if (is.null(s)) stop("No target supplied for group '", group, "'.", call. = FALSE)
+  lam <- .check_target_compat(as.matrix(s$lambda), L_R, group = group)
+  psi <- as.matrix(s$psi)
+  if (!is.null(colnames(psi))) psi <- psi[colnames(L_R), colnames(L_R), drop = FALSE]
+  th <- s$theta
+  if (!is.null(names(th))) th <- th[rownames(L_R)]
+  if (length(th) != nrow(L_R) || !identical(dim(psi), c(ncol(L_R), ncol(L_R))))
+    stop("Group '", group, "': target psi / theta do not match the fit's factors / items.", call. = FALSE)
+  list(lambda = lam, psi = psi, theta = as.numeric(th))
+}
+
+# STDYX loadings of a solution: lambda * sd(factor) / sd(item), with
+# sd(item) from the model-implied covariance lambda psi lambda' + theta.
+.stdyx_from_solution <- function(s) {
+  S <- s$lambda %*% s$psi %*% t(s$lambda) + diag(as.numeric(s$theta), nrow(s$lambda))
+  out <- s$lambda * outer(1 / sqrt(diag(S)), sqrt(diag(s$psi)))
+  dimnames(out) <- dimnames(s$lambda)
+  out
+}
+
+# The lavaan object behind any supported fit type (an invariance object at
+# the given level).
+.lav_from <- function(x, level = "configural") {
+  if (inherits(x, "esem_invariance")) {
+    fit <- x$models[[level]]
+    if (is.null(fit))
+      stop("Invariance object has no '", level, "' level fit.", call. = FALSE)
+    if (isS4(fit)) fit else fit$lavaan_fit
+  } else if (inherits(x, c("esem_fit", "besem_fit"))) {
+    x$lavaan_fit
+  } else if (isS4(x) && methods::is(x, "lavaan")) {
+    x
+  } else {
+    stop("Unsupported class for align_loadings: ",
+         paste(class(x), collapse = "/"), call. = FALSE)
+  }
+}
+
+# Per-group unstandardized solution: lambda (items x factors), psi (factor
+# covariance matrix) and theta (residual variances), from the parameter
+# table.  Group names as in .extract_loadings_with_se().
+.extract_solution <- function(x, level = "configural") {
+  lav <- .lav_from(x, level)
+  pt  <- lavaan::parTable(lav)
+  lo  <- pt[pt$op == "=~", , drop = FALSE]
+  factors <- unique(lo$lhs); items <- unique(lo$rhs)
+  groups  <- sort(unique(pt$group)); groups <- groups[groups > 0L]
+  grp_labels <- if (length(groups) > 1L) {
+    lab <- tryCatch(lavaan::lavInspect(lav, "group.label"), error = function(e) NULL)
+    if (is.null(lab) || length(lab) != length(groups)) as.character(groups) else lab
+  } else "1"
+  out <- lapply(groups, function(g) {
+    pg <- pt[pt$group == g, , drop = FALSE]
+    L <- matrix(0, length(items), length(factors), dimnames = list(items, factors))
+    P <- matrix(0, length(factors), length(factors), dimnames = list(factors, factors))
+    th <- setNames(rep(NA_real_, length(items)), items)
+    for (i in which(pg$op == "=~")) L[pg$rhs[i], pg$lhs[i]] <- pg$est[i]
+    for (i in which(pg$op == "~~" & pg$lhs %in% factors & pg$rhs %in% factors)) {
+      P[pg$lhs[i], pg$rhs[i]] <- pg$est[i]; P[pg$rhs[i], pg$lhs[i]] <- pg$est[i]
+    }
+    for (i in which(pg$op == "~~" & pg$lhs %in% items & pg$lhs == pg$rhs)) th[pg$lhs[i]] <- pg$est[i]
+    list(lambda = L, psi = P, theta = th)
+  })
+  names(out) <- grp_labels
   out
 }
 
@@ -260,19 +365,7 @@ align_loadings <- function(x,
 #   se:       items x factors matrix (zeros where standardizedSolution
 #             reports no SE -- e.g., fixed parameters)
 .extract_loadings_with_se <- function(x, level = "configural") {
-  if (inherits(x, "esem_invariance")) {
-    fit <- x$models[[level]]
-    if (is.null(fit))
-      stop("Invariance object has no '", level, "' level fit.", call. = FALSE)
-    lav <- if (isS4(fit)) fit else fit$lavaan_fit
-  } else if (inherits(x, c("esem_fit", "besem_fit"))) {
-    lav <- x$lavaan_fit
-  } else if (isS4(x) && methods::is(x, "lavaan")) {
-    lav <- x
-  } else {
-    stop("Unsupported class for align_loadings: ",
-         paste(class(x), collapse = "/"), call. = FALSE)
-  }
+  lav <- .lav_from(x, level)
 
   ss <- lavaan::standardizedSolution(lav, type = "std.all", se = TRUE)
   ss <- ss[ss$op == "=~", , drop = FALSE]
@@ -346,6 +439,9 @@ extract_mplus_loadings <- function(mp_out,
          call. = FALSE)
   ld$factor <- sub(".BY$", "", ld$paramHeader)
   ld$item   <- toupper(ld$param)
+  # Outputs printed without standard errors (single "StdYX Estimate" column)
+  # come back from MplusAutomation as character.
+  ld$est    <- suppressWarnings(as.numeric(ld$est))
 
   has_grp <- "Group" %in% names(ld) && length(unique(ld$Group)) > 1L
   groups  <- if (has_grp) unique(ld$Group) else "1"

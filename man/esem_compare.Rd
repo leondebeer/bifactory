@@ -24,10 +24,10 @@ used in \code{esem_model}.}
 \value{
 A list of class \code{"esem_comparison"} with:
 \describe{
-  \item{\code{fit_table}}{A \code{data.frame} of fit indices for both models.}
-  \item{\code{esem_fit}}{The original \code{esem_fit} object.}
-  \item{\code{cfa_fit}}{The fitted \code{lavaan} CFA object.}
-  \item{\code{lavtest}}{Output of \code{lavaan::lavTestLRT()} if models are nested, else \code{NULL}.}
+\item{\code{fit_table}}{A \code{data.frame} of fit indices for both models.}
+\item{\code{esem_fit}}{The original \code{esem_fit} object.}
+\item{\code{cfa_fit}}{The fitted \code{lavaan} CFA object.}
+\item{\code{lavtest}}{Output of \code{lavaan::lavTestLRT()} if models are nested, else \code{NULL}.}
 }
 }
 \description{

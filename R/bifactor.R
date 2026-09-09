@@ -35,7 +35,7 @@
 #' @param estimator Character. Default \code{"MLR"}
 #'   (ML with Huber-White robust SEs and Satorra-Bentler scaled chi-square).
 #' @param std.lv Logical. Fix factor variances to 1. Default \code{TRUE}.
-#' @param ordered Character vector of ordered-categorical item names.
+#' @param ordered Character vector of ordinal item names.
 #'   When non-\code{NULL}, routes to \code{\link{besem_ordered}}. For Mplus-aligned
 #'   ordered B-ESEM use \code{method = "rotation"} there (default in
 #'   \code{\link{run_comparison}}).
@@ -98,7 +98,7 @@
 #' }
 #'
 #' @seealso \code{\link{esem}} for standard oblique ESEM,
-#'   \code{\link{besem_ordered}} for ordered-categorical B-ESEM,
+#'   \code{\link{besem_ordered}} for ordinal B-ESEM,
 #'   \code{\link{make_bifactor_target}} for the target matrix,
 #'   \code{\link{generate_mplus_besem_syntax}} for Mplus comparison.
 #'
@@ -164,7 +164,7 @@ besem <- function(data,
   # Route automatically to besem_ordered() which implements the bifactor
   # set-ESEM pipeline (polychoric -> EFA -> WLSMV CFA), matching Mplus behaviour.
   if (!is.null(ordered)) {
-    message("Ordered indicators detected. lavaan's efa() block does not support ",
+    message("Ordinal indicators detected. lavaan's efa() block does not support ",
             "WLSMV rotation.\nRouting to besem_ordered() (bifactor set-ESEM + WLSMV pipeline).")
     return(besem_ordered(
       data             = data,

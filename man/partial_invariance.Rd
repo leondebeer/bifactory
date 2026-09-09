@@ -16,7 +16,9 @@ partial_invariance(
 \item{inv}{An \code{esem_invariance} object from \code{\link{esem_invariance}}.}
 
 \item{level}{Character. The invariance level to partially free:
-\code{"weak"}, \code{"strong"}, or \code{"strict"}.}
+\code{"strong"} or \code{"strict"}. Partial weak invariance is not
+defined for ESEM: the rotated loading block is constrained across groups
+as a unit, so no single loading can be freed.}
 
 \item{max_free}{Integer. Maximum parameters to free before stopping.
 Default 10. Byrne et al. (1989) recommend freeing the minimum number
@@ -30,14 +32,14 @@ DCFI >= this value. Default -0.010 (Cheung & Rensvold, 2002).}
 \value{
 An object of class \code{"esem_partial_invariance"} with:
 \describe{
-  \item{\code{$freed_params}}{Data frame: round, label, group_name,
-    score (LM), delta_cfi (baseline-relative), converged.}
-  \item{\code{$partial_fit}}{esem_fit at \code{level} with freed params.}
-  \item{\code{$downstream}}{Named list of esem_fit for levels above target.}
-  \item{\code{$downstream_lrt}}{lavTestLRT() comparisons among downstream.}
-  \item{\code{$table}}{Combined fit table (original + partial + downstream).}
-  \item{\code{$converged}}{Logical: did DCFI pass cutoff?}
-  \item{\code{$group_partial}}{Character vector: final group.partial labels.}
+\item{\code{$freed_params}}{Data frame: round, label, group_name,
+score (LM), delta_cfi (baseline-relative), converged.}
+\item{\code{$partial_fit}}{esem_fit at \code{level} with freed params.}
+\item{\code{$downstream}}{Named list of esem_fit for levels above target.}
+\item{\code{$downstream_lrt}}{lavTestLRT() comparisons among downstream.}
+\item{\code{$table}}{Combined fit table (original + partial + downstream).}
+\item{\code{$converged}}{Logical: did DCFI pass cutoff?}
+\item{\code{$group_partial}}{Character vector: final group.partial labels.}
 }
 }
 \description{
@@ -47,10 +49,24 @@ minimum set of non-invariant equality constraints needed to restore
 acceptable fit (DCFI >= -0.010). Downstream invariance levels are then
 re-tested under the same partial constraints.
 }
-\section{Limitations}{
+\section{What can be released}{
 
-B-ESEM models are not supported. Use
-\code{lavaan::lavTestScore(inv$models[[level]]$lavaan_fit)} directly.
+ESEM and B-ESEM loadings rotate as a block, so partial configural and
+partial weak invariance do not exist. Partial strong releases intercepts
+(continuous items) or thresholds (ordered items); partial strict releases
+residual variances. Constraints are released one at a time, largest score
+test first (van de Schoot, Lugtig & Hox, 2012). An intercept or threshold
+is released only if every factor the item belongs to keeps at least two
+items with invariant intercepts/thresholds (Byrne, Shavelson & Muthen,
+1989), and a warning is issued when more than 20\\% of the constraints
+added at that level are released (Dimitrov, 2010). The search is data
+driven: report every released parameter. On ordered items the search keeps
+at least one threshold per item invariant (Millsap & Yun-Tein, 2004); an
+item's last threshold can be released by hand through
+\code{esem_invariance(..., group.partial = "item|t1")}, which then fixes
+the item's residual variance at 1 in every group. A partial refit that
+fits worse than the full model (a lavaan local optimum) is retried from
+simple starting values.
 }
 
 \seealso{

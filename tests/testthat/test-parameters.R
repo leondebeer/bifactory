@@ -41,3 +41,8 @@ test_that("print falls back to print.data.frame when attributes are lost", {
   attr(ps, "blocks") <- NULL   # simulate loss (e.g. rbind/merge strip attrs)
   expect_output(print(ps), "std")   # fallback renders without error
 })
+
+test_that("print header reports the robust (scaled) chi-square for an MLR fit", {
+  x2 <- unname(lavaan::fitMeasures(fit$lavaan_fit, "chisq.scaled"))
+  expect_output(print(parameters(fit)), sprintf("X2(12)=%.3f", x2), fixed = TRUE)
+})

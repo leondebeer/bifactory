@@ -2,7 +2,7 @@
 % Please edit documentation in R/ordered_esem.R
 \name{besem_ordered}
 \alias{besem_ordered}
-\title{Bifactor ESEM for Ordered-Categorical Data}
+\title{Bifactor ESEM for Ordinal Data}
 \usage{
 besem_ordered(
   data,
@@ -31,8 +31,8 @@ derived from \code{specific_factors}.}
 
 \item{method}{Character. \code{"rotation"} (default): custom DWLS/WLSMV +
 orthogonal \code{targetT} rotation (Mplus-aligned B-ESEM). \code{"set-esem"}:
-lavaan WLSMV **bifactor CFA** with non-primary specific loadings fixed at
-\code{0*} and starts from polychoric EFA---does **not** match Mplus B-ESEM
+lavaan WLSMV \strong{bifactor CFA} with non-primary specific loadings fixed at
+\code{0*} and starts from polychoric EFA---does \strong{not} match Mplus B-ESEM
 loadings (restricted model; use only for debugging or when you want zero
 specific-factor cross-loadings).}
 
@@ -63,14 +63,14 @@ and \code{\link[lavaan:fitMeasures]{fitMeasures}(x)}. For \code{method = "set-es
 \code{lavaan_fit} is the fitted bifactor CFA.
 }
 \description{
-Fits B-ESEM on ordered-categorical indicators. Called from \code{\link{besem}}
+Fits B-ESEM on ordinal indicators. Called from \code{\link{besem}}
 when \code{ordered} is set. For Mplus-aligned loadings and fit indices use
 \code{method = "rotation"} (default; also used by \code{\link{run_comparison}}).
 }
 \section{Method \code{"set-esem"} vs \code{"rotation"}}{
 
 \code{rotation} estimates cross-loadings (targeted toward zero), then rotates---
-same estimand as Mplus B-ESEM WLSMV. \code{set-esem} **fixes** non-primary
+same estimand as Mplus B-ESEM WLSMV. \code{set-esem} \strong{fixes} non-primary
 specific loadings at zero in lavaan; G and primary loadings are re-optimized
 under that harder constraint, so loadings and fit differ from Mplus.
 }
@@ -78,27 +78,27 @@ under that harder constraint, so loadings and fit differ from Mplus.
 \section{Estimator paths}{
 
 \describe{
-  \item{Continuous ESEM / B-ESEM}{
-    \code{\link{esem}} and \code{\link{besem}} use \code{lavaan::cfa()} with a
-    native \code{efa()} block (integrated MLR estimation and rotation).
-  }
-  \item{Ordered ESEM}{
-    \code{esem(ordered = ...)} calls \code{\link{esem_ordered}}. Default
-    \code{method = "lavaan"} (lavaan WLSMV, \code{efa()} block, post-hoc rotation).
-    \code{method = "rotation"} uses a custom DWLS pipeline (polychoric correlations
-    + \pkg{GPArotation}).
-  }
-  \item{Ordered B-ESEM}{
-    \code{besem(ordered = ...)} calls \code{\link{besem_ordered}}. Default
-    \code{method = "rotation"} (custom DWLS/WLSMV + orthogonal \code{targetT}; this
-    is what \code{\link{run_comparison}} uses for ordered data). \code{method = "set-esem"}
-    fits a lavaan WLSMV bifactor **CFA** with non-primary specific loadings fixed at
-    zero; it does **not** match Mplus B-ESEM loadings.
-  }
-  \item{Multi-group invariance}{
-    \code{\link{esem_invariance}} uses lavaan multi-group \code{efa()} models plus
-    explicit syntax patches for ordered B-ESEM. See that help page for scope limits.
-  }
+\item{Continuous ESEM / B-ESEM}{
+\code{\link{esem}} and \code{\link{besem}} use \code{lavaan::cfa()} with a
+native \code{efa()} block (integrated MLR estimation and rotation).
+}
+\item{Ordered ESEM}{
+\code{esem(ordered = ...)} calls \code{\link{esem_ordered}}. Default
+\code{method = "lavaan"} (lavaan WLSMV, \code{efa()} block, post-hoc rotation).
+\code{method = "rotation"} uses a custom DWLS pipeline (polychoric correlations
++ \pkg{GPArotation}).
+}
+\item{Ordered B-ESEM}{
+\code{besem(ordered = ...)} calls \code{\link{besem_ordered}}. Default
+\code{method = "rotation"} (custom DWLS/WLSMV + orthogonal \code{targetT}; this
+is what \code{\link{run_comparison}} uses for ordered data). \code{method = "set-esem"}
+fits a lavaan WLSMV bifactor \strong{CFA} with non-primary specific loadings fixed at
+zero; it does \strong{not} match Mplus B-ESEM loadings.
+}
+\item{Multi-group invariance}{
+\code{\link{esem_invariance}} uses lavaan multi-group \code{efa()} models plus
+explicit syntax patches for ordered B-ESEM. See that help page for scope limits.
+}
 }
 }
 
@@ -107,12 +107,12 @@ under that harder constraint, so loadings and fit differ from Mplus.
 Defaults differ by entry point; pass \code{missing} explicitly when fitting ESEM and
 B-ESEM separately on the same ordered dataset.
 \itemize{
-  \item \code{\link{specify_model}} / \code{\link{run_comparison}}: \code{"pairwise"}
-    for ordered data, \code{"listwise"} for continuous.
-  \item \code{\link{esem_ordered}}: \code{"pairwise"}.
-  \item \code{\link{besem_ordered}}: \code{"listwise"} (pipeline still passes
-    \code{missing} from the spec when used via \code{run_comparison}).
-  \item \code{\link{esem}} / \code{\link{besem}} (continuous): \code{"listwise"}.
+\item \code{\link{specify_model}} / \code{\link{run_comparison}}: \code{"pairwise"}
+for ordered data, \code{"listwise"} for continuous.
+\item \code{\link{esem_ordered}}: \code{"pairwise"}.
+\item \code{\link{besem_ordered}}: \code{"listwise"} (pipeline still passes
+\code{missing} from the spec when used via \code{run_comparison}).
+\item \code{\link{esem}} / \code{\link{besem}} (continuous): \code{"listwise"}.
 }
 }
 
@@ -120,7 +120,7 @@ B-ESEM separately on the same ordered dataset.
 
 For \code{\link{besem_ordered}(method = "rotation")} and
 \code{\link{esem_ordered}(method = "rotation")}, \code{$lavaan_fit} is often an
-**auxiliary** one-factor WLSMV CFA used only to extract DWLS weight matrices---not
+\strong{auxiliary} one-factor WLSMV CFA used only to extract DWLS weight matrices---not
 the fitted ESEM/B-ESEM model. Use \code{\link{std_loadings}}, \code{\link{parameters}},
 and \code{\link[lavaan:fitMeasures]{fitMeasures}(x)} on the \code{esem_fit} wrapper;
 \code{\link[lavaan:fitMeasures]{fitMeasures}(x)} reads \code{wlsmv_stats} when present.
@@ -156,5 +156,5 @@ summary(fit_b_ord, fit.measures = TRUE, standardized = TRUE)
 }
 \seealso{
 \code{\link{esem_ordered}}, \code{\link{besem}},
-  \code{\link{run_comparison}}
+\code{\link{run_comparison}}
 }

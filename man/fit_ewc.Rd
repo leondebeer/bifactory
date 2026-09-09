@@ -31,19 +31,19 @@ fit_ewc(
 \item{custom_syntax}{Character or \code{NULL}.  Supply a hand-edited
 syntax string (from \code{\link{ewc_syntax}}) instead of auto-generating.
 When non-\code{NULL}, \code{referents} and \code{var_fixed} still control
-the \code{lavaan::cfa()} options (std.lv, auto.fix.first).}
+the \code{lavaan::cfa()} options (\code{std.lv}).}
 
 \item{...}{Additional arguments forwarded to \code{lavaan::cfa()}.}
 }
 \value{
 An object of class \code{"ewc_fit"}:
 \describe{
-  \item{\code{lavaan_fit}}{lavaan fit object; all lavaan generics work on it.}
-  \item{\code{syntax}}{lavaan model string used.}
-  \item{\code{referents}}{Named vector of referent items.}
-  \item{\code{var_fixed}}{Identification mode used.}
-  \item{\code{estimator}}{Estimator (\code{"MLR"} for continuous, \code{"DWLS"} for ordered).}
-  \item{\code{spec}}{The spec object.}
+\item{\code{lavaan_fit}}{lavaan fit object; all lavaan generics work on it.}
+\item{\code{syntax}}{lavaan model string used.}
+\item{\code{referents}}{Named vector of referent items.}
+\item{\code{var_fixed}}{Identification mode used.}
+\item{\code{estimator}}{Estimator (\code{"MLR"} for continuous, \code{"DWLS"} for ordered).}
+\item{\code{spec}}{The spec object.}
 }
 }
 \description{
@@ -52,5 +52,5 @@ a standard \code{lavaan::cfa()} model -- no rotation required.
 }
 \seealso{
 \code{\link{ewc_syntax}}, \code{\link{find_ewc_referents}},
-  \code{\link{compare_ewc}}
+\code{\link{compare_ewc}}
 }

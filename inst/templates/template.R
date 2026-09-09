@@ -29,7 +29,7 @@ output_folder <- "bfi_results"  # where save_results() will write
 
 # Missing-data handling.  Applied uniformly to CFA, ESEM, and B-ESEM so all
 # three fit indices are computed on the same sample.
-#   NULL         -> "pairwise" (ordered) or "listwise" (continuous) default
+#   NULL         -> "pairwise" (ordinal) or "listwise" (continuous) default
 #   "listwise"   -> complete-case; always safe, drops rows with any NA
 #   "pairwise"   -> ordered only; all available pairs for each polychoric
 #   "fiml"/"ml"  -> continuous only; uses all rows under MAR. With >= 4
@@ -75,6 +75,8 @@ print(results)
 
 
 # -- 6. Reliability indices (omega, omega_H, ECV, PUC, H) ----------------------
+# Composite sums use absolute standardized loadings (Morin, Arens & Marsh
+# 2016), so reverse-worded items need no reverse-scoring beforehand.
 indices <- compute_indices(results)
 print(indices)
 
@@ -99,6 +101,15 @@ noquote(rbind(
   ESEM  = fit_indices(results$fit_esem),
   BESEM = fit_indices(results$fit_besem)
 ))
+
+# A CFA of your own against the ESEM on the same data, like for like
+# (same estimator, robust test, missing-data setting):
+# esem_compare(results$fit_esem, "A =~ A1 + A2 + A3 + A4 + A5 \n C =~ C1 + ...")
+
+# Reproducible orientation of the rotated loadings (sign + column order),
+# or alignment to another fit of the same model (orientation transfer):
+# align_loadings(results$fit_besem, target = "canonical")
+# align_loadings(results$fit_besem, target = other_besem_fit)
 
 
 # -- 8. Save tables + plots to disk -------------------------------------------
@@ -176,6 +187,10 @@ head(scores_esem)
 #
 #  Requires `group` set in specify_model().  Fits configural / weak / strong /
 #  strict levels and reports Delta CFI per step (Cheung & Rensvold 2002).
+#  through = "varcov" or "means" adds levels 5 (latent variances/covariances)
+#  and 6 (latent means) of Morin's sequence.  cores = 2 (default) fits the two
+#  starting-value runs of each level on two worker processes; cores = 1 runs
+#  them one after the other with identical results.
 # =============================================================================
 
 spec_mg <- do.call(specify_model, c(
@@ -189,15 +204,29 @@ spec_mg <- do.call(specify_model, c(
 
 # Bifactor ESEM invariance (G + specific factors) -- the main attraction
 # of this package. Swap to model = "esem" for the standard ESEM path.
-# Validated against Mplus on BFI for G = 2, 3, 4 (max |dCFI| = 0.001,
-# max |dSRMR| = 0.002; df match exactly).
+# Validated against Mplus on BFI for G = 2 to 5 at all six levels (df
+# identical, max |dCFI| = 0.001, standardized loadings within 0.001 once both
+# solutions are expressed in one rotation orientation).
 inv <- esem_invariance(spec_mg, model = "besem")
 # inv <- esem_invariance(spec_mg, model = "esem")
+# inv <- esem_invariance(spec_mg, model = "besem", through = "means")  # levels 5 + 6
+# inv <- esem_invariance(spec_mg, model = "besem", cores = 1)          # sequential
 print(inv)
 
+# Partial invariance: release intercepts/thresholds (level = "strong") or
+# residual variances (level = "strict") one at a time by score test, keeping
+# two invariant anchors per factor; the printout lists every release.
+# pinv <- partial_invariance(inv, level = "strong")
+
+# Side-by-side check against Mplus (needs Mplus + MplusAutomation):
+# run_mplus_besem_invariance(inv, "mplus_inv",
+#   mplus_command = "C:/Program Files/Mplus/Mplus.exe",
+#   group_labels = c("1" = "MALE", "2" = "FEMALE"))
+
 # -- 4a. Access parameters at a specific invariance level --------------------
-# inv$models has slots: configural, weak, strong, strict. Each is an
-# esem_fit object that parameters() / summary() / fitMeasures() understand.
+# inv$models has slots: configural, weak, strong, strict (plus varcov and
+# means when fitted with through = "means"). Each is an esem_fit object
+# that parameters() / summary() / fitMeasures() understand.
 
 parameters(inv$models$strong)                   # STDYX loadings (strong level)
 parameters(inv$models$strict)                   # STDYX loadings (strict level)
@@ -209,9 +238,11 @@ ps_strict <- parameters(inv$models$strict, digits = 3)
 
 
 # -- 4b. Factor scores at a specific level -----------------------------------
-# Auto-selected passing level (most constrained level with dCFI >= -0.010
-# at its own transition). Override with level = "configural" / "weak" /
-# "strong" / "strict" to force a specific level.
+# Auto-selected passing level: the most constrained fitted level (up to
+# "means" when through = "means") with dCFI >= -0.010 at its own transition
+# and an admissible solution (no negative variance, see inv$notes). Override
+# with level = "configural" / "weak" / "strong" / "strict" / "varcov" /
+# "means" to force a specific level.
 scores_inv <- factor_scores(inv)                # auto level
 # scores_strict <- factor_scores(inv, level = "strict")
 # scores_bart   <- factor_scores(inv, method = "bartlett", level = "strong")

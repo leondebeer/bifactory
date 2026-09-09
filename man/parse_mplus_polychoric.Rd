@@ -14,8 +14,8 @@ section. This section is written when \code{SAMPSTAT} appears in the
 }
 \value{
 A named, symmetric numeric matrix of polychoric correlations with
-  1s on the diagonal.  Row and column names are the item names as reported
-  by Mplus (typically upper-case).
+1s on the diagonal.  Row and column names are the item names as reported
+by Mplus (typically upper-case).
 }
 \description{
 Reads a Mplus \code{.out} file and assembles the polychoric (tetrachoric)

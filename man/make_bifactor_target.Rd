@@ -15,7 +15,7 @@ make_bifactor_target(specific_factors, indicators, g_name = "G")
 }
 \value{
 A numeric matrix (items  x  factors) of class \code{"esem_target"}.
-  Column order: G first, then specific factors in list order.
+Column order: G first, then specific factors in list order.
 }
 \description{
 Builds the target loading matrix for B-ESEM. The general factor G has

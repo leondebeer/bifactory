@@ -1,6 +1,6 @@
 Package: bifactory
-Title: (Bifactor) ESEM with Continuous (MLR) or Ordered (WLSMV) Data
-Version: 0.5.2
+Title: (Bifactor) ESEM with Continuous (MLR) or Ordinal (WLSMV) Data
+Version: 0.6.0
 Authors@R: 
     person(given  = "Leon T.",
            family = "De Beer",
@@ -9,10 +9,10 @@ Authors@R:
 Description: Fits bifactor exploratory structural equation models (B-ESEM),
     together with standard exploratory structural equation modeling (ESEM)
     and confirmatory factor analysis (CFA), for continuous and
-    ordered-categorical data. Continuous models use 'lavaan' native efa()
+    ordinal data. Continuous models use 'lavaan' native efa()
     blocks with robust maximum likelihood (MLR) estimation.
-    Ordered-categorical ESEM defaults to the 'lavaan' weighted least squares
-    mean- and variance-adjusted (WLSMV) estimator; ordered B-ESEM uses a
+    Ordinal ESEM defaults to the 'lavaan' weighted least squares
+    mean- and variance-adjusted (WLSMV) estimator; ordinal B-ESEM uses a
     custom diagonally weighted least squares (DWLS) path with polychoric
     correlations from 'psych', rotation-delta standard errors via 'numDeriv',
     and a mean- and variance-adjusted chi-square. Target, geomin, and oblimin
@@ -29,13 +29,14 @@ License: AGPL-3
 URL: https://github.com/leondebeer/bifactory
 BugReports: https://github.com/leondebeer/bifactory/issues
 Encoding: UTF-8
+Roxygen: list(markdown = TRUE)
 Depends: R (>= 4.1.0)
-Imports: lavaan (>= 0.6-21), GPArotation, psych, MASS, numDeriv, stats,
-        utils, graphics, methods, withr
-Suggests: MplusAutomation, openxlsx2, testthat (>= 3.0.0)
+Imports: lavaan (>= 0.7-2), GPArotation, psych, MASS, numDeriv, stats,
+        utils, graphics, methods, parallel, withr
+Suggests: MplusAutomation, openxlsx2, pkgload, testthat (>= 3.0.0)
 Config/testthat/edition: 3
 Config/roxygen2/version: 8.0.0
 NeedsCompilation: no
-Packaged: 2026-08-04 13:54:33 UTC; leond
+Packaged: 2026-09-09 09:51:03 UTC; leond
 Author: Leon T. De Beer [aut, cre]
 Maintainer: Leon T. De Beer <leondb@gmail.com>

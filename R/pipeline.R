@@ -26,7 +26,7 @@
 #' }
 #'
 #' @param ordered Logical or character vector. If \code{TRUE}, all indicators
-#'   are treated as ordered-categorical and the estimator is automatically
+#'   are treated as ordinal and the estimator is automatically
 #'   switched to \code{"WLSMV"} (both R and Mplus). If a character vector of
 #'   item names is supplied, only those items are treated as ordered.
 #'   Default \code{FALSE} (continuous).
@@ -176,7 +176,7 @@ specify_model <- function(..., data, label = "ESEM Model",
     missing <- tolower(missing)
     if (!is.null(ordered_items)) {
       if (!missing %in% c("pairwise", "listwise"))
-        stop("For ordered data, `missing` must be \"pairwise\" or \"listwise\" ",
+        stop("For ordinal data, `missing` must be \"pairwise\" or \"listwise\" ",
              "(you gave \"", missing, "\").", call. = FALSE)
     } else {
       if (missing %in% fiml_syn) {
@@ -278,9 +278,9 @@ print.esem_spec <- function(x, ...) {
   cat("Estimator (ESEM)  :", x$estimator_esem, "\n")
   cat("Missing data      :", x$missing, "\n")
   if (!is.null(x$ordered)) {
-    cat("Note: ordered data -> WLSMV for all models.\n")
+    cat("Note: ordinal data -> WLSMV for all models.\n")
   }
-  cat("Ordered items     :", if (is.null(x$ordered)) "none" else
+  cat("Ordinal items     :", if (is.null(x$ordered)) "none" else
         paste0(length(x$ordered), " items"), "\n")
   cat("Group        :", if (is.null(x$group)) "none (single group)" else
         paste0(x$group, " (", length(x$group_levels), " groups: ",
@@ -1166,7 +1166,7 @@ fit_indices <- function(fit) {
   #   "cfi.scaled" = mean-variance adjusted WLSMV chi-square (matches Mplus)
   # We detect which to use by checking whether the scaled variant is available.
   #
-  # SRMR: corrected to match Mplus convention (see comment inside r_fi()).
+  # SRMR: Mplus definition via .srmr_mplus() for every lavaan-based fit.
   #
   # CFI/TLI residual gap vs Mplus: historically ~0.001-0.004 for large item
   # sets; root cause was an upward bias in lavaan's polychoric cell-probability
@@ -1193,19 +1193,6 @@ fit_indices <- function(fit) {
     if ("cfi.scaled" %in% names(all_fm) && !is.na(all_fm["cfi.scaled"])) {
       # WLSMV: use scaled indices. Read from all_fm -- no second fitMeasures() call.
       vals <- as.numeric(all_fm[c("cfi.scaled", "tli.scaled", "rmsea.scaled", "srmr")])
-      # Mplus WLSMV SRMR divides by n_pairs + n_thresholds (threshold residuals
-      # are 0 but inflate the denominator).  lavaan uses only n_pairs.
-      # Correct: SRMR_mplus = SRMR_lavaan * sqrt(n_pairs / n_wls).
-      wls_obs <- tryCatch(lavaan::lavInspect(obj, "wls.obs"), error = function(e) NULL)
-      if (!is.null(wls_obs)) {
-        if (is.list(wls_obs)) wls_obs <- wls_obs[[1L]]
-        n_wls  <- length(wls_obs)
-        cor_ov <- lavaan::lavInspect(obj, "cor.ov")
-        if (is.list(cor_ov)) cor_ov <- cor_ov[[1L]]
-        n_items <- nrow(cor_ov)
-        n_pairs <- n_items * (n_items - 1L) / 2L
-        if (n_wls > n_pairs) vals[4L] <- vals[4L] * sqrt(n_pairs / n_wls)
-      }
       ci_lo    <- as.numeric(all_fm["rmsea.scaled.ci.lower"])
       ci_hi    <- as.numeric(all_fm["rmsea.scaled.ci.upper"])
       chi_vals <- as.numeric(all_fm[c("chisq.scaled", "df.scaled", "pvalue.scaled")])
@@ -1221,6 +1208,7 @@ fit_indices <- function(fit) {
       chi_vals <- as.numeric(all_fm[c("chisq", "df", "pvalue")])
       ic_vals  <- as.numeric(all_fm[c("aic", "bic", "bic2")])
     }
+    vals[4L] <- tryCatch(.srmr_mplus(obj), error = function(e) vals[4L])
     # Fallback: if lavaan didn't populate CI keys, compute from scratch
     if (is.na(ci_lo) || is.na(ci_hi)) {
       n_obs <- tryCatch(sum(lavaan::lavInspect(obj, "nobs")), error = function(e) NA_integer_)

@@ -34,11 +34,11 @@ optionally a grouping variable).}
 \item{rotation}{Character. Rotation criterion. Passed to
 \code{lavaan::cfa(rotation = ...)}. Common choices:
 \itemize{
-  \item \code{"geomin"} (default) -- oblique geomin, the Mplus default
-  \item \code{"target"} -- requires \code{target} matrix
-  \item \code{"varimax"} -- orthogonal varimax
-  \item \code{"oblimin"} -- oblique oblimin
-  \item \code{"none"} -- no rotation (confirmatory EFA)
+\item \code{"geomin"} (default) -- oblique geomin, the Mplus default
+\item \code{"target"} -- requires \code{target} matrix
+\item \code{"varimax"} -- orthogonal varimax
+\item \code{"oblimin"} -- oblique oblimin
+\item \code{"none"} -- no rotation (confirmatory EFA)
 }
 The full list of lavaan-supported rotations is in
 \code{?lavaan::efaRotate}.}
@@ -54,7 +54,7 @@ Use \code{"WLSMV"} for ordered indicators.}
 \item{std.lv}{Logical. Fix factor variances to 1 for identification?
 Default \code{TRUE} (recommended for ESEM).}
 
-\item{ordered}{Character vector of ordered-categorical item names.
+\item{ordered}{Character vector of ordinal item names.
 When non-\code{NULL}, routes to \code{\link{esem_ordered}} (WLSMV). Default
 \code{method} there is \code{"lavaan"}; see \code{?esem_ordered} for the
 custom \code{"rotation"} path.}
@@ -66,7 +66,7 @@ multi-group ESEM (configural by default).}
 equal across groups, e.g. \code{"loadings"} (metric) or
 \code{c("loadings", "intercepts")} (scalar).}
 
-\item{missing}{Character. Missing data handling for **continuous** fits.
+\item{missing}{Character. Missing data handling for \strong{continuous} fits.
 Default \code{"listwise"}; use \code{"fiml"} for full-information ML.
 When \code{ordered} is set, passed to \code{\link{esem_ordered}} (default
 \code{"pairwise"} there unless you override).}
@@ -92,44 +92,47 @@ differ from \code{lavaan::standardizedsolution(lavaan_fit(x))}; see
 \value{
 An object of class \code{"esem_fit"} containing:
 \describe{
-  \item{\code{lavaan_fit}}{The \pkg{lavaan} fit object for continuous ESEM.
-    For ordered / custom WLSMV paths see \code{\link{esem_ordered}} and
-    \link[=doc_estimator_paths]{The lavaan_fit slot on custom WLSMV fits}.}
-  \item{\code{syntax}}{The lavaan model string that was estimated.}
-  \item{\code{nfactors}}{Number of factors.}
-  \item{\code{rotation}}{Rotation method used.}
-  \item{\code{factor_names}}{Factor names.}
-  \item{\code{indicators}}{Item names included in the model.}
-  \item{\code{call}}{The matched call.}
+\item{\code{lavaan_fit}}{The \pkg{lavaan} fit object for continuous ESEM.
+For ordered / custom WLSMV paths see \code{\link{esem_ordered}} and
+\link[=doc_estimator_paths]{The lavaan_fit slot on custom WLSMV fits}.}
+\item{\code{syntax}}{The lavaan model string that was estimated.}
+\item{\code{nfactors}}{Number of factors.}
+\item{\code{rotation}}{Rotation method used.}
+\item{\code{factor_names}}{Factor names.}
+\item{\code{indicators}}{Item names included in the model.}
+\item{\code{call}}{The matched call.}
 }
 }
 \description{
-Fits ESEM using \pkg{lavaan}'s native \code{efa()} block. For **continuous**
+Fits ESEM using \pkg{lavaan}'s native \code{efa()} block. For \strong{continuous}
 data (default), estimation and rotation are integrated in lavaan's ML
 optimiser---the same single-step approach as Mplus \code{(*1)} syntax. For
-**ordered** indicators, supply \code{ordered} and the call is routed to
+\strong{ordered} indicators, supply \code{ordered} and the call is routed to
 \code{\link{esem_ordered}} (set-ESEM / WLSMV; not identical to continuous
 \code{esem()}).
 }
 \details{
-## Mplus equivalence
+\subsection{Mplus equivalence}{\tabular{ll}{
+   Mplus syntax \tab bifactory equivalent \cr
+   \verb{F1-F3 BY y1-y15 (*1);} \tab \code{esem(data, nfactors = 3)} \cr
+   \verb{(*1)} with geomin (default) \tab \code{rotation = "geomin"} \cr
+   \verb{(*1)} with target \tab \verb{rotation = "target", target = tgt} \cr
+   \code{GROUPING = g;} \tab \code{group = "g"} \cr
+   Metric invariance \tab \code{group_equal = "loadings"} \cr
+   Scalar invariance \tab \code{group_equal = c("loadings", "intercepts")} \cr
+}
 
-| Mplus syntax | bifactory equivalent |
-|---|---|
-| `F1-F3 BY y1-y15 (*1);` | `esem(data, nfactors = 3)` |
-| `(*1)` with geomin (default) | `rotation = "geomin"` |
-| `(*1)` with target | `rotation = "target", target = tgt` |
-| `GROUPING = g;` | `group = "g"` |
-| Metric invariance | `group_equal = "loadings"` |
-| Scalar invariance | `group_equal = c("loadings", "intercepts")` |
+}
 
-## Why not automate cross-loadings from a CFA?
+\subsection{Why not automate cross-loadings from a CFA?}{
+
 Adding cross-loadings stepwise from modification indices is a different
 (exploratory CFA) approach and is not recommended: it capitalises on chance,
 inflates Type I error, and produces a different model on every dataset.
 ESEM instead estimates \emph{all} cross-loadings simultaneously, with
 rotation acting as a mathematical penalty for complexity -- giving a
 reproducible, theory-neutral solution.
+}
 }
 \section{How this differs from a two-stage EFA + CFA workaround}{
 
@@ -143,27 +146,27 @@ simultaneously -- exactly as Mplus does with the \code{(*1)} syntax.
 \section{Estimator paths}{
 
 \describe{
-  \item{Continuous ESEM / B-ESEM}{
-    \code{\link{esem}} and \code{\link{besem}} use \code{lavaan::cfa()} with a
-    native \code{efa()} block (integrated MLR estimation and rotation).
-  }
-  \item{Ordered ESEM}{
-    \code{esem(ordered = ...)} calls \code{\link{esem_ordered}}. Default
-    \code{method = "lavaan"} (lavaan WLSMV, \code{efa()} block, post-hoc rotation).
-    \code{method = "rotation"} uses a custom DWLS pipeline (polychoric correlations
-    + \pkg{GPArotation}).
-  }
-  \item{Ordered B-ESEM}{
-    \code{besem(ordered = ...)} calls \code{\link{besem_ordered}}. Default
-    \code{method = "rotation"} (custom DWLS/WLSMV + orthogonal \code{targetT}; this
-    is what \code{\link{run_comparison}} uses for ordered data). \code{method = "set-esem"}
-    fits a lavaan WLSMV bifactor **CFA** with non-primary specific loadings fixed at
-    zero; it does **not** match Mplus B-ESEM loadings.
-  }
-  \item{Multi-group invariance}{
-    \code{\link{esem_invariance}} uses lavaan multi-group \code{efa()} models plus
-    explicit syntax patches for ordered B-ESEM. See that help page for scope limits.
-  }
+\item{Continuous ESEM / B-ESEM}{
+\code{\link{esem}} and \code{\link{besem}} use \code{lavaan::cfa()} with a
+native \code{efa()} block (integrated MLR estimation and rotation).
+}
+\item{Ordered ESEM}{
+\code{esem(ordered = ...)} calls \code{\link{esem_ordered}}. Default
+\code{method = "lavaan"} (lavaan WLSMV, \code{efa()} block, post-hoc rotation).
+\code{method = "rotation"} uses a custom DWLS pipeline (polychoric correlations
++ \pkg{GPArotation}).
+}
+\item{Ordered B-ESEM}{
+\code{besem(ordered = ...)} calls \code{\link{besem_ordered}}. Default
+\code{method = "rotation"} (custom DWLS/WLSMV + orthogonal \code{targetT}; this
+is what \code{\link{run_comparison}} uses for ordered data). \code{method = "set-esem"}
+fits a lavaan WLSMV bifactor \strong{CFA} with non-primary specific loadings fixed at
+zero; it does \strong{not} match Mplus B-ESEM loadings.
+}
+\item{Multi-group invariance}{
+\code{\link{esem_invariance}} uses lavaan multi-group \code{efa()} models plus
+explicit syntax patches for ordered B-ESEM. See that help page for scope limits.
+}
 }
 }
 
@@ -172,12 +175,12 @@ simultaneously -- exactly as Mplus does with the \code{(*1)} syntax.
 Defaults differ by entry point; pass \code{missing} explicitly when fitting ESEM and
 B-ESEM separately on the same ordered dataset.
 \itemize{
-  \item \code{\link{specify_model}} / \code{\link{run_comparison}}: \code{"pairwise"}
-    for ordered data, \code{"listwise"} for continuous.
-  \item \code{\link{esem_ordered}}: \code{"pairwise"}.
-  \item \code{\link{besem_ordered}}: \code{"listwise"} (pipeline still passes
-    \code{missing} from the spec when used via \code{run_comparison}).
-  \item \code{\link{esem}} / \code{\link{besem}} (continuous): \code{"listwise"}.
+\item \code{\link{specify_model}} / \code{\link{run_comparison}}: \code{"pairwise"}
+for ordered data, \code{"listwise"} for continuous.
+\item \code{\link{esem_ordered}}: \code{"pairwise"}.
+\item \code{\link{besem_ordered}}: \code{"listwise"} (pipeline still passes
+\code{missing} from the spec when used via \code{run_comparison}).
+\item \code{\link{esem}} / \code{\link{besem}} (continuous): \code{"listwise"}.
 }
 }
 
@@ -215,7 +218,7 @@ fit_mg <- esem(HolzingerSwineford1939, nfactors = 3,
 }
 \seealso{
 \code{\link{make_target}} for target matrices,
-\code{\link{esem_ordered}} for ordered-categorical data,
+\code{\link{esem_ordered}} for ordinal data,
 \code{\link{esem_compare}} for ESEM vs CFA comparison,
 \code{\link{std_loadings}} for the standardised loading matrix.
 }

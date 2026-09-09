@@ -327,7 +327,8 @@ print.alignment_check <- function(x, ...) {
   if (has_cfa)
   cat("        phi_cfa   = latent correlation from fitted CFA\n        infl%     = (phi_cfa - phi) / phi, inflation of CFA vs alignment\n")
   cat(sprintf("\n  Thresholds (sd log Q): < %.2f slight,  < %.2f moderate\n", t1, t2))
-  cat("  Overall: ", x$recommendation, "\n", sep = "")
+  cat(paste(strwrap(paste0("Overall: ", x$recommendation), width = getOption("width", 80L),
+                    indent = 2, exdent = 11), collapse = "\n"), "\n", sep = "")
   cat("\n  Reference:\n")
   cat("    Mehrvarz, M., & Rouder, J. N. (2026). The geometry and brittleness of\n")
   cat("    latent correlations in confirmatory factor analysis [Preprint].\n")

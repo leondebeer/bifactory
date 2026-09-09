@@ -17,16 +17,29 @@ or raw lavaan S4 fit.}
 
 \item{target}{One of:
 \itemize{
-  \item a numeric matrix (single-group) or list of matrices (multi-group)
-    of reference standardized loadings, with rownames = items, colnames
-    = factors;
-  \item another fit object of compatible structure;
-  \item \code{"group1"} -- align all groups to the first group's loadings
-    within \code{x} (within-fit consistency, no external reference);
-  \item \code{"canonical"} (default) -- apply deterministic sign + column
-    order rule (sort columns by \eqn{\Sigma\lambda^2} desc, sign-flip so
-    the largest \eqn{|\lambda|} per column is positive). No external
-    reference required.
+\item a numeric matrix (single-group) or list of matrices (multi-group)
+of reference standardized loadings, with rownames = items, colnames
+= factors;
+\item another fit object of compatible structure (an
+\code{esem_invariance} target is read at the same \code{level}). The
+comparison is then made by orientation transfer: the unstandardized
+loadings are rotated to the reference and the factor covariances are
+transformed with the same rotation before standardizing. From the
+weak level on the non-reference groups have free factor covariances,
+and standardizing with the diagonal of \eqn{Q'\Psi_g Q} is not
+rotation-equivariant, so Procrustes alignment of standardized
+matrices leaves a residual there (about 0.01 to 0.02 on
+\code{psych::bfi}) that the transfer removes;
+\item a list with one element per group, each a list with
+\code{lambda} (unstandardized loadings, items x factors), \code{psi}
+(factor covariance matrix) and \code{theta} (residual variances): a
+solution from elsewhere, compared by the same orientation transfer;
+\item \code{"group1"} -- align all groups to the first group's loadings
+within \code{x} (within-fit consistency, no external reference);
+\item \code{"canonical"} (default) -- apply deterministic sign + column
+order rule (sort columns by \eqn{\Sigma\lambda^2} desc, sign-flip so
+the largest \eqn{|\lambda|} per column is positive). No external
+reference required.
 }}
 
 \item{level}{Only used for \code{esem_invariance} objects. One of
@@ -39,14 +52,16 @@ different factors). \code{"none"} returns aligned point estimates only.}
 }
 \value{
 An object of class \code{aligned_loadings}: a list with one
-  element per group, each containing
-  \describe{
-    \item{loadings}{aligned standardized loading matrix (items x factors)}
-    \item{se}{aligned SEs (matching shape) or \code{NULL}}
-    \item{Q}{the orthogonal rotation matrix applied}
-    \item{residual_max, residual_mean}{max / mean abs residual vs target
-      (only when an external reference was supplied)}
-  }
+element per group, each containing
+\describe{
+\item{loadings}{aligned standardized loading matrix (items x factors)}
+\item{se}{aligned SEs (matching shape) or \code{NULL}}
+\item{Q}{the orthogonal rotation matrix applied}
+\item{residual_max, residual_mean}{max / mean abs residual vs target
+(only when an external reference was supplied)}
+}
+The attribute \code{"method"} is \code{"canonical"}, \code{"procrustes"}
+or \code{"transfer"}.
 }
 \description{
 Rotates a fitted solution's standardized loadings by an orthogonal Q so

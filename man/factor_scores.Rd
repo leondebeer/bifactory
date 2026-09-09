@@ -24,28 +24,34 @@ B-ESEM models with orthogonal rotation both methods return identical
 scores (\eqn{\Phi = I}).}
 
 \item{level}{Character. Only used when \code{x} is an \code{esem_invariance}
-object.  \code{"auto"} (default) selects the most constrained invariance
-level whose own transition \eqn{\Delta}CFI \eqn{\ge -0.010}.  Override
-with \code{"configural"}, \code{"weak"}, \code{"strong"}, or
-\code{"strict"}.  Silently ignored for plain fit objects.}
+object.  \code{"auto"} (default) selects the most constrained fitted
+invariance level whose own transition \eqn{\Delta}CFI \eqn{\ge -0.010},
+including \code{"varcov"} and \code{"means"} when
+\code{esem_invariance()} was run with \code{through}.  Override
+with \code{"configural"}, \code{"weak"}, \code{"strong"},
+\code{"strict"}, \code{"varcov"} or \code{"means"}.  \code{"auto"}
+skips a level whose reported solution
+is inadmissible (a negative variance or a non-positive-definite matrix,
+recorded in \code{inv$notes}) even when its \eqn{\Delta}CFI passes.
+Silently ignored for plain fit objects.}
 
 \item{align}{Optional alignment of the score columns. \code{NULL} (default)
 returns scores in the model's native rotation orientation -- which can
 sign-flip or column-permute across reruns or solvers (lavaan vs Mplus)
 for B-ESEM target rotation. Supply one of:
 \itemize{
-  \item \code{"canonical"} -- deterministic rule (columns sorted by
-    \eqn{\Sigma\lambda^2} descending, sign-flipped so the largest
-    \eqn{|\lambda|} per column is positive). No external reference;
-    reproducible across reruns.
-  \item \code{"group1"} -- multi-group only; rotate each group's scores
-    to match group 1's loading orientation.
-  \item a numeric matrix (single-group) or list of matrices (multi-group)
-    of reference standardized loadings (rownames = items, colnames =
-    factors). Useful for aligning to an external reference such as
-    Mplus output via \code{extract_mplus_loadings()}.
-  \item another fit object (\code{esem_fit}, \code{esem_invariance})
-    -- aligns to that fit's loadings.
+\item \code{"canonical"} -- deterministic rule (columns sorted by
+\eqn{\Sigma\lambda^2} descending, sign-flipped so the largest
+\eqn{|\lambda|} per column is positive). No external reference;
+reproducible across reruns.
+\item \code{"group1"} -- multi-group only; rotate each group's scores
+to match group 1's loading orientation.
+\item a numeric matrix (single-group) or list of matrices (multi-group)
+of reference standardized loadings (rownames = items, colnames =
+factors). Useful for aligning to an external reference such as
+Mplus output via \code{extract_mplus_loadings()}.
+\item another fit object (\code{esem_fit}, \code{esem_invariance})
+-- aligns to that fit's loadings.
 }
 Internally calls \code{align_loadings()} to compute the per-group
 rotation \eqn{Q}, then rotates the score matrix by \eqn{Q}. Note: under
@@ -64,9 +70,9 @@ Defaults to \code{-0.010} (Cheung & Rensvold, 2002).  Only used when
 }
 \value{
 A \code{data.frame} with one column per latent factor (named by
-  the model's factor labels) and one row per observation.  A \code{group}
-  column is prepended automatically for multi-group models.  Rows for
-  missing observations contain \code{NA} in all factor columns.
+the model's factor labels) and one row per observation.  A \code{group}
+column is prepended automatically for multi-group models.  Rows for
+missing observations contain \code{NA} in all factor columns.
 }
 \description{
 Returns a data frame of estimated latent factor scores, one column per

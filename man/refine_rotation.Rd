@@ -13,8 +13,8 @@ refine_rotation(results)
 }
 \value{
 The same \code{results} object with \code{fit_besem} updated if a
-  better rotation was found, otherwise unchanged. A message reports whether
-  the criterion improved. The \code{comparison_table} is also updated.
+better rotation was found, otherwise unchanged. A message reports whether
+the criterion improved. The \code{comparison_table} is also updated.
 }
 \description{
 The bifactor target rotation criterion surface has many local minima. R and
@@ -29,12 +29,12 @@ Mplus STDYX solution, then evaluates whether the target criterion at that
 \eqn{\mathbf{T}} is lower than R's best random-start criterion. If so, the
 better rotation is adopted. This is methodologically sound because:
 \enumerate{
-  \item The same published criterion function is still being minimised.
-  \item Procrustes only provides a well-informed starting point; the final
-    solution is the converged \code{GPArotation::targetT} optimum from that
-    start.
-  \item The approach is analogous to Mansolf and Reise's (2016)
-    recommendation to use Schmid-Leiman solutions as warm starts.
+\item The same published criterion function is still being minimised.
+\item Procrustes only provides a well-informed starting point; the final
+solution is the converged \code{GPArotation::targetT} optimum from that
+start.
+\item The approach is analogous to Mansolf and Reise's (2016)
+recommendation to use Schmid-Leiman solutions as warm starts.
 }
 }
 \examples{

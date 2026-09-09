@@ -3,8 +3,10 @@
 #' Measurement Invariance Testing for ESEM Models
 #'
 #' Tests configural, weak (metric), strong (scalar), and strict invariance for
-#' an ESEM model across groups. Returns a formatted table of fit indices and
-#' chi-square difference tests, analogous to Mplus's multi-group output.
+#' an ESEM model across groups, optionally followed by latent
+#' variance/covariance and latent mean invariance (\code{through}). Returns a
+#' formatted table of fit indices and chi-square difference tests, analogous
+#' to Mplus's multi-group output.
 #'
 #' @inheritSection doc_estimator_paths Estimator paths
 #'
@@ -18,7 +20,25 @@
 #' @param missing Character. Missing data handling passed to \code{lavaan::cfa()}.
 #'   Default \code{NULL} uses \code{spec$missing} from \code{\link{specify_model}}
 #'   (\code{"pairwise"} for ordered data, \code{"listwise"} for continuous).
-#' @param verbose Logical. Print progress messages. Default \code{TRUE}.
+#' @param verbose Logical. Print progress messages. Default \code{TRUE}. The
+#'   `Fitting <level> ...` line is shown in bold blue where the console
+#'   supports ANSI colour (RStudio, or a terminal whose \code{TERM} is not
+#'   "dumb"); \code{options(bifactory.ansi_colour = FALSE)} turns the colour
+#'   off, \code{TRUE} forces it.
+#' @param through Character. Last level of the sequence to fit.
+#'   \code{"strict"} (default) stops at the four measurement-invariance levels.
+#'   \code{"varcov"} adds latent variance/covariance invariance (level 5:
+#'   factor variances fixed to 1 in every group and factor covariances equal
+#'   across groups, i.e. 0 in every group for B-ESEM). \code{"means"} adds
+#'   latent mean invariance (level 6: factor means fixed to 0 in every group).
+#'   Levels are cumulative, so \code{"means"} fits all six models.
+#' @param cores Integer. Worker processes for the two starting-value fits of
+#'   each level (lavaan's default start and \code{start = "simple"}), which are
+#'   independent and run at the same time when \code{cores >= 2} (default 2, the
+#'   most that helps). The results are identical; a level then takes as long as
+#'   its slower start instead of both together (\code{psych::bfi}, three groups,
+#'   six levels: 13 instead of 18 minutes). \code{1} fits sequentially. The
+#'   workers load this package and the calling session's library path.
 #' @param ... Additional arguments passed to the underlying fit function. Do not
 #'   pass \code{group}, \code{group_equal}, \code{ordered}, or
 #'   \code{parameterization} here -- these are managed internally.
@@ -27,13 +47,20 @@
 #' \describe{
 #'   \item{\code{table}}{Data frame with fit indices and D-statistics.
 #'     \code{print()} renders it formatted.}
-#'   \item{\code{models}}{Named list of fit objects:
-#'     \code{configural}, \code{weak}, \code{strong}, \code{strict}.
+#'   \item{\code{models}}{Named list of fit objects, one per fitted level:
+#'     \code{configural}, \code{weak}, \code{strong}, \code{strict}, and, with
+#'     \code{through}, \code{varcov} and \code{means}.
 #'     \code{NULL} entries indicate a model that failed to fit.}
-#'   \item{\code{lrt}}{Named list of \code{lavTestLRT()} outputs:
-#'     \code{weak}, \code{strong}, \code{strict}.}
+#'   \item{\code{lrt}}{Named list of \code{lavTestLRT()} outputs, one per
+#'     fitted level after configural (each compared with the level before it).}
 #'   \item{\code{spec}}{The original model specification.}
 #'   \item{\code{model}}{Character: \code{"esem"} or \code{"besem"}.}
+#'   \item{\code{notes}}{Named list, one character vector per level that raised a
+#'     lavaan warning while being fitted or compared (singular information matrix
+#'     for the robust test statistic, non-positive-definite latent or residual
+#'     covariance matrix, negative variance). The warnings are caught, reworded
+#'     and shown by \code{print()} instead of being raised, so a run that
+#'     concludes does not end with a lavaan warning. Empty when nothing was raised.}
 #'   \item{\code{fallback_from}, \code{fallback_note}}{If B-ESEM configural fails to
 #'     converge, the result may be from an **ESEM** fallback (no general factor);
 #'     not comparable df-for-df to Mplus B-ESEM.}
@@ -63,6 +90,12 @@
 #' | Weak | loadings | loadings |
 #' | Strong | loadings + intercepts | loadings + thresholds |
 #' | Strict | + residuals | + residuals |
+#' | Latent var/cov (\code{through = "varcov"}) | + factor variances (1) and covariances | + factor variances (1) and covariances |
+#' | Latent means (\code{through = "means"}) | + factor means (0) | + factor means (0) |
+#'
+#' The last two levels follow Morin, Arens and Marsh (2016): the degrees of
+#' freedom grow by \eqn{k(k+1)/2} (variances and covariances of \eqn{k}
+#' factors) and then by \eqn{k} (means) per non-reference group.
 #'
 #' @section Scaled chi-square difference tests:
 #'
@@ -78,6 +111,31 @@
 #' in all groups. Under weak invariance lavaan automatically frees factor
 #' variances in Group 2+ and keeps them at 1 in Group 1. Under strong
 #' invariance factor means are freed in Group 2+ and fixed to 0 in Group 1.
+#' The optional latent var/cov level fixes the Group 2+ variances back to 1
+#' and equates the covariances; the latent mean level fixes the Group 2+
+#' means back to 0.
+#'
+#' With ordered indicators (theta parameterization) the configural model
+#' uses the standard identification in every group: residual variances 1,
+#' factor means 0, all thresholds free. From the weak level on, the
+#' non-reference residual variances and factor means are free and identified
+#' through the equal loadings plus partial threshold equalities (two
+#' thresholds of one referent item per factor, one threshold of every other
+#' item), which is the Mplus convention. The same scheme is not used at the
+#' configural level: with free loadings an item's single equated threshold
+#' is its only link across groups, and when that threshold lies near zero in
+#' a non-reference group the item's residual variance is empirically
+#' unidentified (it ran to several hundred on \code{psych::bfi}, with the
+#' chi-square drifting by 14 to 36 units between programs). The standard
+#' identification is the equivalent, well-conditioned model.
+#'
+#' Group 1 (the reference group) is the first sorted level of the grouping
+#' variable, \code{spec$group_levels}, which is also the reference group in
+#' the Mplus syntax written by \code{\link{run_mplus_besem_invariance}}. The
+#' fits pass this order to lavaan as \code{group.label}; lavaan's own default
+#' would be the order in which the groups appear in the data, and a different
+#' reference group gives an equivalent model with the same fit but differently
+#' oriented loadings and factor covariances.
 #'
 #' @seealso \code{\link{specify_model}}, \code{\link{esem}},
 #'   \code{\link{esem_ordered}}
@@ -127,6 +185,8 @@ esem_invariance <- function(spec,
                              model   = c("esem", "besem"),
                              missing = NULL,
                              verbose = TRUE,
+                             through = c("strict", "varcov", "means"),
+                             cores   = 2L,
                              ...) {
 
   if (!inherits(spec, "esem_spec"))
@@ -137,7 +197,11 @@ esem_invariance <- function(spec,
     return(invisible(NULL))
   }
 
-  model <- match.arg(model)
+  model   <- match.arg(model)
+  through <- match.arg(through)
+
+  cl <- .make_cluster(cores)
+  if (!is.null(cl)) on.exit(parallel::stopCluster(cl), add = TRUE)
 
   if (model == "besem" && is.null(spec$bifactor_target))
     stop(
@@ -174,19 +238,26 @@ esem_invariance <- function(spec,
   # Constraint vectors differ between continuous and ordered estimator paths.
   # For ordered (WLSMV + theta parameterization) Mplus equates thresholds at
   # scalar level, not intercepts.
+  # Levels 5 and 6 (Morin's sequence) fix the non-reference groups' latent
+  # variances back to 1 and their covariances equal to the reference group's
+  # (0 for B-ESEM), then their latent means to 0.
   constraints <- if (is_ordered) {
     list(
       configural = NULL,
       weak       = "loadings",
       strong     = c("loadings", "thresholds"),
-      strict     = c("loadings", "thresholds", "residuals")
+      strict     = c("loadings", "thresholds", "residuals"),
+      varcov     = c("loadings", "thresholds", "residuals", "lv.variances", "lv.covariances"),
+      means      = c("loadings", "thresholds", "residuals", "lv.variances", "lv.covariances", "means")
     )
   } else {
     list(
       configural = NULL,
       weak       = "loadings",
       strong     = c("loadings", "intercepts"),
-      strict     = c("loadings", "intercepts", "residuals")
+      strict     = c("loadings", "intercepts", "residuals"),
+      varcov     = c("loadings", "intercepts", "residuals", "lv.variances", "lv.covariances"),
+      means      = c("loadings", "intercepts", "residuals", "lv.variances", "lv.covariances", "means")
     )
   }
 
@@ -201,7 +272,7 @@ esem_invariance <- function(spec,
       paste(spec$group_levels, collapse = ", "), ")"
     ))
     message(paste(
-      " Estimator:", if (is_ordered) "WLSMV (ordered/categorical)" else paste0(spec$estimator_esem, " (continuous)")
+      " Estimator:", if (is_ordered) "WLSMV (ordinal)" else paste0(spec$estimator_esem, " (continuous)")
     ))
     message("======================================================\n")
   }
@@ -224,21 +295,24 @@ esem_invariance <- function(spec,
     }
   }
 
-  levels <- c("configural", "weak", "strong", "strict")
+  all_levels <- c("configural", "weak", "strong", "strict", "varcov", "means")
+  levels     <- all_levels[seq_len(match(through, all_levels))]
   labels <- c(
     configural = "1. Configural",
     weak       = "2. Weak (metric)",
     strong     = "3. Strong (scalar)",
-    strict     = "4. Strict"
+    strict     = "4. Strict",
+    varcov     = "5. Latent var/cov",
+    means      = "6. Latent means"
   )
 
-  # -- Fit all four models -------------------------------------------------------
-  fits <- list()
+  # -- Fit the models up to `through` ----------------------------------------------
+  fits  <- list()
+  notes <- list()
   for (lv in levels) {
-    if (verbose)
-      message(sprintf("  Fitting %-22s", paste0(labels[lv], " ...")))
+    if (verbose) message(.fit_header(labels[lv]))
 
-    fit <- tryCatch(
+    r <- .with_notes(tryCatch(
       .fit_invariance_model(
         spec        = spec,
         group_equal = constraints[[lv]],
@@ -246,6 +320,7 @@ esem_invariance <- function(spec,
         model       = model,
         missing     = missing,
         verbose     = verbose,
+        cl          = cl,
         ...
       ),
       error = function(e) {
@@ -259,7 +334,16 @@ esem_invariance <- function(spec,
         }
         NULL
       }
-    )
+    ))
+    fit <- r$value
+    lv_notes <- unique(c(attr(fit, "notes"), r$notes))
+    # replace lavaan's generic admissibility warnings by group-specific findings
+    # read from the reported solution (which group, which parameter)
+    if (!is.null(fit)) {
+      adm <- .inv_admissibility(fit$lavaan_fit)
+      lv_notes <- c(lv_notes[!grepl("negative variance|not positive definite", lv_notes)], adm)
+    }
+    if (length(lv_notes)) notes[[lv]] <- lv_notes
 
     conv <- if (!is.null(fit)) {
       tryCatch(lavaan::lavInspect(fit$lavaan_fit, "converged"), error = function(e) NA)
@@ -273,6 +357,7 @@ esem_invariance <- function(spec,
       } else {
         message(if (isTRUE(conv)) " OK" else " WARNING (did not converge)")
       }
+      for (n in lv_notes) message("      note: ", n, " (noted, continuing)")
     }
 
     fits[[lv]] <- fit
@@ -311,7 +396,7 @@ esem_invariance <- function(spec,
         call. = FALSE
       )
       inv_esem <- esem_invariance(spec, model = "esem", missing = missing,
-                                  verbose = verbose, ...)
+                                  verbose = verbose, through = through, ...)
       inv_esem$fallback_from <- "besem"
       inv_esem$fallback_note <- paste0(
         "B-ESEM configural failed to converge after 7 retries. Returned model ",
@@ -330,8 +415,10 @@ esem_invariance <- function(spec,
   comparison_pairs <- list(
     weak   = c("configural", "weak"),
     strong = c("weak",       "strong"),
-    strict = c("strong",     "strict")
-  )
+    strict = c("strong",     "strict"),
+    varcov = c("strict",     "varcov"),
+    means  = c("varcov",     "means")
+  )[levels[-1L]]
 
   lrt_results <- list()
   for (comp in names(comparison_pairs)) {
@@ -340,7 +427,7 @@ esem_invariance <- function(spec,
 
     if (is.null(fits[[lo]]) || is.null(fits[[hi]])) next
 
-    lrt_results[[comp]] <- tryCatch(
+    r <- .with_notes(tryCatch(
       lavaan::lavTestLRT(fits[[lo]]$lavaan_fit, fits[[hi]]$lavaan_fit),
       error = function(e) {
         warning(
@@ -349,22 +436,33 @@ esem_invariance <- function(spec,
         )
         NULL
       }
-    )
+    ))
+    lrt_results[[comp]] <- r$value
+    if (length(r$notes)) notes[[hi]] <- c(notes[[hi]], paste("difference test:", r$notes))
   }
 
   # -- Build table ---------------------------------------------------------------
   table_out <- .build_invariance_table(fits, lrt_results, levels, labels, is_ordered)
 
-  structure(
+  out <- structure(
     list(
       table  = table_out,
       models = fits,
       lrt    = lrt_results,
       spec   = spec,
-      model  = model
+      model  = model,
+      notes  = notes
     ),
     class = "esem_invariance"
   )
+
+  if (verbose) {
+    message("")
+    for (line in .inv_conclusion(out)) message("  ", line)
+    if (length(notes)) message("  Estimation notes are listed by print(); see inv$notes.")
+    message("  Remember: print(inv)")
+  }
+  out
 }
 
 
@@ -403,11 +501,21 @@ print.esem_invariance <- function(x, ...) {
   if (length(failed))
     cat("  NOTE: Models that failed to fit:", paste(failed, collapse = ", "), "\n\n")
 
+  # lavaan's estimation warnings, reworded (see .translate_lavaan_warning()).
+  if (length(x$notes)) {
+    cat("  Estimation notes (lavaan messages for the reported fit, reworded):\n")
+    for (lv in names(x$notes))
+      for (n in x$notes[[lv]]) cat(sprintf("    %s: %s\n", lv, n))
+    cat("  These describe the fit at that level; the fit indices above are reported\n")
+    cat("  as computed. A non-positive-definite matrix at the most constrained level\n")
+    cat("  means that level's solution is inadmissible and should not be interpreted.\n\n")
+  }
+  for (line in .inv_conclusion(x)) cat("  ", line, "\n", sep = "")
+  cat("\n")
+
   cat("Access results:\n")
-  cat("  inv$models$configural  -- esem_fit (configural)\n")
-  cat("  inv$models$weak        -- esem_fit (weak/metric)\n")
-  cat("  inv$models$strong      -- esem_fit (strong/scalar)\n")
-  cat("  inv$models$strict      -- esem_fit (strict)\n")
+  for (lv in names(x$models))
+    cat(sprintf("  inv$models$%-11s -- esem_fit (%s)\n", lv, lv))
   cat("  inv$lrt$weak           -- lavTestLRT() output (weak vs configural)\n")
   cat("  inv$table              -- data frame of all fit indices\n\n")
 
@@ -458,22 +566,37 @@ print.esem_invariance <- function(x, ...) {
        opts  = list(check.gradient = FALSE, optim.force.converged = TRUE))
 )
 
-# Convergence retry sequence for Mplus.
-# NULL = Mplus defaults; numeric = CONVERGENCE/H1CONVERGENCE with ITERATIONS=10000.
-# Mplus's CONVERGENCE is a parameter-change criterion (not function-change like
-# lavaan's rel.tol), and Mplus's optimizer uses 20 steepest-descent iterations
-# before switching to quasi-Newton -- so progressive loosening genuinely helps
-# Mplus escape saddles (unlike for lavaan's nlminb; see .CONV_RETRY_SEQ above).
-.MPLUS_CONV_RETRY <- c(1e-4, 5e-4, 1e-3, 5e-3, 1e-2, 5e-2, 2.5e-2)
+# Convergence criteria for Mplus: first attempt 1e-6 (Mplus's default .00005
+# stopped the eight-country BAT 2023 means model 15 chi-square units and the
+# two-country strict model 71 units above its own optimum), then the retry
+# sequence starting at Mplus's default (the eight-country weak/strong/strict
+# models converge there but not at 1e-6).  Mplus's CONVERGENCE is a
+# parameter-change criterion (not function-change like lavaan's rel.tol), and
+# Mplus's optimizer uses 20 steepest-descent iterations before switching to
+# quasi-Newton -- so progressive loosening genuinely helps Mplus escape saddles
+# (unlike for lavaan's nlminb; see .CONV_RETRY_SEQ above).
+.MPLUS_CONV_RETRY <- c(5e-5, 1e-4, 5e-4, 1e-3, 5e-3, 1e-2, 5e-2, 2.5e-2)
 
 .mplus_conv_lines <- function(conv_crit = NULL) {
-  if (is.null(conv_crit)) return("")
+  if (is.null(conv_crit)) conv_crit <- 1e-6
+  crit <- format(conv_crit, scientific = FALSE, trim = TRUE)
   paste0(
     "\n  ITERATIONS = 10000;",
     "\n  H1ITERATIONS = 10000;",
-    sprintf("\n  CONVERGENCE = %.4f;", conv_crit),
-    sprintf("\n  H1CONVERGENCE = %.4f;", conv_crit)
+    "\n  CONVERGENCE = ", crit, ";",
+    "\n  H1CONVERGENCE = ", crit, ";"
   )
+}
+
+# DIFFTEST line for the next level, or "" when the previous level saved no
+# derivatives file (Mplus prints no fit and saves nothing when the information
+# matrix is singular, e.g. the eight-country BAT 2023 var/cov model); an input
+# naming a missing file fails with "*** ERROR in ANALYSIS command".
+.mplus_difftest_line <- function(dat_path) {
+  if (file.exists(dat_path))
+    return(paste0("\n  DIFFTEST = ", basename(dat_path), ";"))
+  message(sprintf("  (no %s from the previous level: DIFFTEST omitted)", basename(dat_path)))
+  ""
 }
 
 .mplus_converged <- function(out_path) {
@@ -491,17 +614,273 @@ print.esem_invariance <- function(x, ...) {
   ))
 }
 
+.inv_fx <- function(fit) fit$lavaan_fit@optim$fx
 
-.fit_with_retry <- function(fit_fn, verbose = TRUE) {
+# lavaan's own warnings ("lavaan->lav_test_sb(): could not invert ...") read
+# like failures to users; esem_invariance() catches them per level, on the
+# master and on the workers, and reports them reworded (inv$notes, print()).
+# Package warnings are not lavaan-prefixed and pass through untouched.
+.translate_lavaan_warning <- function(msg) {
+  m <- gsub("\\s+", " ", msg)
+  if (grepl("could not invert information matrix", m))
+    return("robust test statistic could not be computed (singular information matrix)")
+  if (grepl("latent variables is not positive definite", m))
+    return("latent covariance matrix (psi) is not positive definite in at least one group")
+  if (grepl("residual", m) && grepl("not positive definite", m))
+    return("residual covariance matrix (theta) is not positive definite in at least one group")
+  if (grepl("negative", m) && grepl("variance", m))
+    return("a negative variance estimate (Heywood case)")
+  sub("^lavaan(->[^:]*\\(\\))?[ :]*(WARNING:)?\\s*", "lavaan: ", m)
+}
+
+.with_notes <- function(expr) {
+  notes <- character()
+  value <- withCallingHandlers(expr, warning = function(w) {
+    msg <- conditionMessage(w)
+    if (grepl("^lavaan", msg)) {
+      notes <<- c(notes, .translate_lavaan_warning(msg))
+      invokeRestart("muffleWarning")
+    }
+  })
+  list(value = value, notes = unique(notes))
+}
+
+# Most constrained level (strict, strong, weak) whose own transition dCFI passes
+# the cutoff; configural otherwise. Shared by factor_scores(level = "auto")
+# and the closing line of esem_invariance() / print().
+# Admissibility of the reported fit, read from the solution itself so the
+# note can say which group and which parameter: every variance estimate below
+# zero (latent or residual) and every group whose latent covariance matrix is
+# not positive definite. Returns character(0) when the solution is admissible.
+.inv_admissibility_pt <- function(pt, group_labels, psi) {
+  out <- character()
+  v <- pt[pt$op == "~~" & pt$lhs == pt$rhs & !is.na(pt$est) & pt$est < 0, , drop = FALSE]
+  if (nrow(v)) {
+    lat <- unique(pt$lhs[pt$op == "=~"])
+    by_g <- vapply(split(v, v$group), function(d) {
+      kind <- ifelse(d$lhs %in% lat, "latent variance", "residual variance")
+      paste0(group_labels[d$group[1]], " (", paste(sprintf("%s %s %.3f", d$lhs, kind, d$est), collapse = "; "), ")")
+    }, character(1))
+    out <- c(out, paste0("a negative variance estimate (Heywood case): ", paste(by_g, collapse = ", ")))
+  }
+  npd <- vapply(psi, function(m) {
+    m <- as.matrix(m)
+    nrow(m) > 0 && any(eigen(m, symmetric = TRUE, only.values = TRUE)$values < -1e-8)
+  }, logical(1))
+  if (any(npd))
+    out <- c(out, paste0("latent covariance matrix (psi) is not positive definite: ",
+                         paste(group_labels[which(npd)], collapse = ", ")))
+  out
+}
+
+.inv_admissibility <- function(lav) {
+  tryCatch({
+    pt  <- lavaan::parTable(lav)
+    lab <- lavaan::lavInspect(lav, "group.label")
+    if (!length(lab)) lab <- "1"
+    psi <- lavaan::lavInspect(lav, "cov.lv")
+    if (!is.list(psi)) psi <- list(psi)
+    .inv_admissibility_pt(pt, lab, psi)
+  }, error = function(e) character())
+}
+
+# A level whose reported solution is inadmissible (negative variance,
+# non-positive-definite psi or theta) is skipped even if its dCFI passes; a
+# note about the test statistic alone does not disqualify it.
+.inv_inadmissible <- function(notes) {
+  notes[grepl("negative variance|not positive definite", notes)]
+}
+
+.inv_supported_level <- function(table, models, cutoff = -0.010, notes = NULL) {
+  # every fitted level counts, most constrained first (levels 5 and 6 when
+  # esem_invariance() was run with through = "varcov" / "means")
+  labels <- c(means = "6. Latent means", varcov = "5. Latent var/cov", strict = "4. Strict",
+              strong = "3. Strong (scalar)", weak = "2. Weak (metric)")
+  for (lv in names(labels)) {
+    if (is.null(models[[lv]]) || length(.inv_inadmissible(notes[[lv]]))) next
+    row <- table[table$Model == labels[[lv]], , drop = FALSE]
+    dcfi <- if (nrow(row) && "dCFI" %in% names(row)) row$dCFI[1] else NA_real_
+    if (!is.na(dcfi) && dcfi >= cutoff) return(lv)
+  }
+  "configural"
+}
+
+.inv_conclusion <- function(x, cutoff = -0.010) {
+  fitted <- sum(!vapply(x$models, is.null, logical(1)))
+  by_fit <- .inv_supported_level(x$table, x$models, cutoff)          # dCFI only
+  lv     <- .inv_supported_level(x$table, x$models, cutoff, x$notes)  # admissible too
+  out <- sprintf("Invariance testing concluded: %d of %d levels fitted.", fitted, length(x$models))
+  out <- c(out, paste("Levels considered:", paste(names(x$models), collapse = ", ")),
+           "The invariance fit table can be interpreted.")
+  if (by_fit != lv) {
+    out <- c(out, sprintf("%s is supported by dCFI but its solution is inadmissible (%s); its parameters and factor scores should not be used.",
+                          by_fit, paste(.inv_inadmissible(x$notes[[by_fit]]), collapse = "; ")))
+    # At strict the residual variances are already equal, so the offending
+    # variance is a latent one in some group; equating the latent variances
+    # (level 5) often removes it, and partial_invariance() is the other route.
+    if (by_fit == "strict" && is.null(x$models$varcov))
+      out <- c(out, paste0('Tip: fit through = "varcov" or through = "means" (levels 5 and 6 equate the latent ',
+                           'variances/covariances and means across groups, which often removes a negative latent ',
+                           'variance in one group), or release the offending item with partial_invariance(); ',
+                           'then choose that level explicitly, e.g. factor_scores(inv, level = "varcov").'))
+  }
+  out <- c(out,
+    if (lv == "configural")
+      sprintf("No %slevel beyond configural is supported by dCFI >= %.3f; parameters differ by group (inv$models$configural), or try partial_invariance().",
+              if (by_fit != lv) "admissible " else "", cutoff)
+    else
+      sprintf("The most constrained %slevel supported by dCFI >= %.3f is: %s. Use its parameters (loadings, thresholds, ...): parameters(inv$models$%s).",
+              if (by_fit != lv) "admissible " else "", cutoff, lv, lv))
+  if (length(x$notes[[lv]]))
+    out <- c(out, sprintf("Note at that level: %s. Inspect the solution before reporting it.",
+                          paste(x$notes[[lv]], collapse = "; ")))
+  out
+}
+
+# "Fitting <level> ..." in bold blue where the console supports it, so each
+# level's block stands out in a long log.
+.fit_header <- function(label) {
+  txt <- sprintf("  Fitting %-22s", paste0(label, " ..."))
+  if (.ansi_colour()) paste0("\033[1;34m", txt, "\033[0m") else txt
+}
+
+.set_notes <- function(fit, notes) {
+  if (!is.null(fit) && length(notes)) attr(fit, "notes") <- unique(c(attr(fit, "notes"), notes))
+  fit
+}
+
+
+# Starting values for the ordered multi-group configural fit: each group fitted
+# alone (default and simple start, deeper kept) and the unrotated free-parameter
+# values collected in group order.  The configural model has no cross-group
+# constraint, so its optimum is the sum of the per-group optima, but the joint
+# optimizer's path depends on the number of groups: on four BAT 2023 countries
+# both joint starts left NL in a well 9 % shallower than the one NL alone
+# reaches in five seconds.  Returned as a parameter table (lhs/op/rhs/group/est,
+# which lav_start() matches row by row) rather than a numeric vector: lavaan caps
+# a numeric `start` at 1000 entries (lav_options_check), and four bfi education
+# tiers already need 1040, eight BAT countries 1576.  Returns NULL when any group
+# fails; attribute "fx" holds the per-group fit function values.
+.configural_starts <- function(spec, model, missing, cl = NULL, ...) {
+  if (is.null(spec$group) || length(spec$group_levels) < 2L) return(NULL)
+  builder <- if (model == "besem") .fit_besem_inv_ordered else .fit_esem_inv_ordered
+  dots <- list(...); dots$group.label <- NULL
+  fits <- lapply(spec$group_levels, function(g) {
+    sg <- spec
+    sg$data <- spec$data[spec$data[[spec$group]] %in% g, , drop = FALSE]
+    sg$group <- NULL; sg$group_levels <- NULL
+    tryCatch(.fit_with_retry(function(ctrl = NULL, opts = NULL) {
+      args <- c(list(spec = sg, group_equal = NULL, missing = missing), dots)
+      if (!is.null(ctrl)) args$control <- ctrl
+      args[names(opts)] <- opts
+      suppressWarnings(do.call(builder, args))
+    }, verbose = FALSE, cl = cl), error = function(e) NULL)
+  })
+  if (any(vapply(fits, is.null, logical(1)))) return(NULL)
+  tabs <- lapply(seq_along(fits), function(i) {
+    lf <- fits[[i]]$lavaan_fit
+    pt <- lavaan::parTable(lf)
+    # parTable() holds the rotated solution; the optimizer works on the unrotated
+    # one (the efa-fixed loadings dropped), which lavaan keeps in est.unrotated.
+    if (!is.null(pt$est.unrotated)) { pt$est <- pt$est.unrotated; pt$free <- pt$free.unrotated }
+    if (sum(pt$free > 0L) != length(lf@optim$x)) return(NULL)
+    data.frame(lhs = pt$lhs, op = pt$op, rhs = pt$rhs, group = i, free = pt$free, est = pt$est)
+  })
+  if (any(vapply(tabs, is.null, logical(1)))) return(NULL)
+  x0 <- do.call(rbind, tabs)
+  attr(x0, "fx") <- vapply(fits, .inv_fx, numeric(1))
+  x0
+}
+
+
+# Worker processes for the two starts of each level (esem_invariance(cores = )).
+# NULL (sequential) for cores < 2 or when no cluster can be started.  The workers
+# get the master's library path and this package: the installed namespace, or the
+# load_all() source tree while developing (pkgload marks such a namespace).
+.make_cluster <- function(cores) {
+  cores <- suppressWarnings(as.integer(cores)[1])
+  if (is.na(cores) || cores < 2L) return(NULL)
+  n <- parallel::detectCores()
+  if (!is.na(n)) cores <- min(cores, n)
+  cl <- tryCatch(parallel::makeCluster(cores), error = function(e) NULL)
+  if (is.null(cl)) {
+    message("  (no worker processes available: starts run sequentially)")
+    return(NULL)
+  }
+  # Nothing written in this file goes over the wire here: such a closure carries
+  # this namespace as its environment, which a worker cannot resolve before it
+  # has loaded the package.  .libPaths goes by name, because the function object
+  # would bring its own copy of base's .lib.loc environment along and set that
+  # copy instead of the worker's library path.
+  ns <- asNamespace("bifactory")
+  ok <- tryCatch({
+    parallel::clusterCall(cl, ".libPaths", .libPaths())
+    if (exists(".__DEVTOOLS__", envir = ns, inherits = FALSE) &&
+        requireNamespace("pkgload", quietly = TRUE)) {
+      parallel::clusterCall(cl, pkgload::load_all, getNamespaceInfo(ns, "path"),
+                            quiet = TRUE)
+    } else {
+      parallel::clusterCall(cl, "loadNamespace", "bifactory")
+    }
+    TRUE
+  }, error = function(e) FALSE)
+  if (!ok) {
+    parallel::stopCluster(cl)
+    message("  (workers could not load bifactory: starts run sequentially)")
+    return(NULL)
+  }
+  cl
+}
+
+
+# Relative fit-function gain an alternative start needs before it replaces the
+# default start's converged fit (0.1 %; see the comment inside .fit_with_retry).
+.ALT_START_GAIN <- 1e-3
+
+.fit_with_retry <- function(fit_fn, verbose = TRUE, alt_start = "simple", cl = NULL) {
 
   # Attempt 0: default lavaan settings (tight rel.tol = 1e-10, check.gradient = TRUE).
   # Best fit quality if it converges; matches non-invariance esem/besem behaviour.
-  if (verbose) message("\n    [attempt 0/", length(.CONV_RETRY_SEQ), "] default ...")
-  fit <- tryCatch(fit_fn(ctrl = NULL, opts = NULL), error = function(e) {
-    if (verbose) message(sprintf(" [lavaan ERROR] %s", conditionMessage(e)))
-    NULL
-  })
+  parallel_starts <- !is.null(cl) && !is.null(alt_start)
+  if (verbose) message("\n    [attempt 0/", length(.CONV_RETRY_SEQ), "] default",
+                       if (parallel_starts) " and simple start on 2 workers", " ...")
+  alt <- NULL
+  if (parallel_starts) {
+    # The two starts are independent fits: both at once on the worker processes.
+    both <- parallel::parLapply(
+      cl, list(NULL, list(start = alt_start)),
+      function(o, fit_fn) tryCatch(.with_notes(suppressMessages(fit_fn(ctrl = NULL, opts = o))),
+                                   error = function(e) NULL),
+      fit_fn = fit_fn)
+    fit <- .set_notes(both[[1]]$value, both[[1]]$notes)
+    alt <- .set_notes(both[[2]]$value, both[[2]]$notes)
+  } else {
+    r <- tryCatch(.with_notes(fit_fn(ctrl = NULL, opts = NULL)), error = function(e) {
+      if (verbose) message(sprintf(" [lavaan ERROR] %s", conditionMessage(e)))
+      NULL
+    })
+    fit <- .set_notes(r$value, r$notes)
+  }
   if (.inv_converged(fit)) {
+    # Second start: the multi-group fit function can have several wells (BAT
+    # 2023, two-country configural B-ESEM: the default start stopped 9 % above
+    # the well Mplus reaches).  Keep the deeper of the two converged fits.
+    # alt_start = NULL skips this (configural fits started from the per-group
+    # optima, .configural_starts()).
+    if (!parallel_starts && !is.null(alt_start)) {
+      r <- tryCatch(.with_notes(suppressMessages(fit_fn(ctrl = NULL, opts = list(start = alt_start)))),
+                    error = function(e) NULL)
+      alt <- .set_notes(r$value, r$notes)
+    }
+    # Only a materially deeper alternative replaces the default fit.  The
+    # eight-country BAT 2023 means and strong models have several optima whose
+    # fit functions differ by 0.003 % (section 5c of the BAT 2023 note) while
+    # their loadings differ by 0.11; switching for such a gain only moves the
+    # reported solution away from the default start's well, which is where
+    # Mplus's default start lands.  Real wells differ by 1 % or more (two- and
+    # four-country configural: 9 %, eight-country configural: 1.2 %).
+    if (.inv_converged(alt) &&
+        isTRUE(.inv_fx(alt) < .inv_fx(fit) * (1 - .ALT_START_GAIN))) fit <- alt
     if (verbose) message(" OK")
     return(fit)
   }
@@ -514,10 +893,9 @@ print.esem_invariance <- function(x, ...) {
     if (verbose)
       message(sprintf("\n    [attempt %d/%d] %s ...", i, n_retry, a$label))
 
-    fit <- tryCatch(
-      suppressMessages(fit_fn(ctrl = a$ctrl, opts = a$opts)),
-      error = function(e) NULL
-    )
+    r <- tryCatch(.with_notes(suppressMessages(fit_fn(ctrl = a$ctrl, opts = a$opts))),
+                  error = function(e) NULL)
+    fit <- .set_notes(r$value, r$notes)
     if (.inv_converged(fit)) {
       if (verbose) message(" OK")
       return(fit)
@@ -537,7 +915,7 @@ print.esem_invariance <- function(x, ...) {
 
 
 .fit_invariance_model <- function(spec, group_equal, is_ordered, model,
-                                   missing, verbose = TRUE, ...) {
+                                   missing, verbose = TRUE, cl = NULL, ...) {
 
   # Closure that performs one fit attempt.
   # `ctrl` is either NULL or a named list passed as lavaan's `control` argument
@@ -547,20 +925,26 @@ print.esem_invariance <- function(x, ...) {
   make_fit <- function(ctrl = NULL, opts = NULL) {
     extra <- list()
     if (!is.null(ctrl)) extra$control <- ctrl
-    if (!is.null(opts)) extra <- c(extra, opts)
+    # Reference group = first sorted level (specify_model()), as in the Mplus
+    # generator. lavaan's default is the order of appearance in the data.
+    if (!is.null(spec$group) && !is.null(spec$group_levels) &&
+        is.null(list(...)$group.label))
+      extra$group.label <- as.character(spec$group_levels)
+    # `opts` (retry escape valves, start values) override anything in `...`.
+    with_opts <- function(args) { args <- c(args, extra); args[names(opts)] <- opts; args }
 
     if (model == "besem") {
       if (is_ordered) {
         do.call(
           .fit_besem_inv_ordered,
-          c(list(spec = spec, group_equal = group_equal, missing = missing),
-            list(...), extra)
+          with_opts(c(list(spec = spec, group_equal = group_equal, missing = missing),
+                      list(...)))
         )
       } else {
         do.call(
           .fit_besem_inv_continuous,
-          c(list(spec = spec, group_equal = group_equal, missing = missing),
-            list(...), extra)
+          with_opts(c(list(spec = spec, group_equal = group_equal, missing = missing),
+                      list(...)))
         )
       }
     } else if (is_ordered) {
@@ -576,13 +960,13 @@ print.esem_invariance <- function(x, ...) {
       # behaviour for non-invariance callers.
       do.call(
         .fit_esem_inv_ordered,
-        c(list(spec = spec, group_equal = group_equal, missing = missing),
-          list(...), extra)
+        with_opts(c(list(spec = spec, group_equal = group_equal, missing = missing),
+                    list(...)))
       )
     } else {
       suppressMessages(do.call(
         esem,
-        c(list(
+        with_opts(c(list(
             data         = spec$data,
             nfactors     = spec$nfactors,
             indicators   = spec$all_items,
@@ -595,12 +979,28 @@ print.esem_invariance <- function(x, ...) {
             missing      = missing,
             heywood_fix  = FALSE          # invariance models must stay nested
           ),
-          list(...), extra)
+          list(...)))
       ))
     }
   }
 
-  .fit_with_retry(make_fit, verbose = verbose)
+  # Ordered multi-group configural: start the joint fit from the per-group
+  # optima (.configural_starts(), a parameter table); no second joint start is
+  # needed then.  Any failure falls back to the plain two-start fit.
+  if (is_ordered && is.null(group_equal) && !is.null(spec$group) &&
+      length(spec$group_levels) > 1L && model %in% c("besem", "esem")) {
+    x0 <- .configural_starts(spec, model = model, missing = missing, cl = cl, ...)
+    if (!is.null(x0)) {
+      fit <- tryCatch(
+        .fit_with_retry(function(ctrl = NULL, opts = NULL)
+                          make_fit(ctrl, c(list(start = x0), opts)),
+                        verbose = verbose, alt_start = NULL),
+        error = function(e) NULL)
+      if (!is.null(fit)) return(fit)
+    }
+  }
+
+  .fit_with_retry(make_fit, verbose = verbose, cl = cl)
 }
 
 
@@ -665,6 +1065,12 @@ print.esem_invariance <- function(x, ...) {
 
 
 .fit_besem_inv_ordered <- function(spec, group_equal, missing, ...) {
+  # lavaan-style group.partial labels ("x9|t3", "x9~~x9") are honoured by the
+  # threshold/residual writer below: the explicit equality labels written there
+  # would otherwise defeat lavaan's own group.partial.
+  dots <- list(...)
+  group_partial <- dots$group.partial
+  dots$group.partial <- NULL
 
   # Build orthogonal target: 1 -> NA (free), 0 -> 0 (target toward zero).
   # make_bifactor_target() produces a 0/1 numeric matrix; lavaan's rotation uses
@@ -703,6 +1109,9 @@ print.esem_invariance <- function(x, ...) {
   #   instead of 0.  This produces a correct df but a mis-parameterised model.
 
   is_configural <- is.null(group_equal)
+  # Levels 5/6 of esem_invariance(): latent var/cov and latent mean invariance.
+  fix_varcov <- !is.null(group_equal) && "lv.variances" %in% group_equal
+  fix_means  <- !is.null(group_equal) && "means"        %in% group_equal
   # Use spec$group_levels (na.omit'd in specify_model) so NA values in the
   # grouping column are not counted as an extra group.  Fall back to an
   # na.omit computation if group_levels is absent for any reason.
@@ -715,7 +1124,9 @@ print.esem_invariance <- function(x, ...) {
   }
 
   if (!is_configural && !is.null(spec$group)) {
-    grp_spec  <- paste(c("0", rep("NA", n_groups - 1L)), collapse = ", ")
+    # Latent var/cov invariance: the non-reference covariances go back to 0.
+    grp_spec  <- paste(c("0", rep(if (fix_varcov) "0" else "NA", n_groups - 1L)),
+                       collapse = ", ")
     fac_pairs <- combn(all_factor_names, 2L, simplify = FALSE)
     cov_lines <- vapply(fac_pairs,
       function(p) paste0(p[1L], " ~~ c(", grp_spec, ")*", p[2L]),
@@ -727,15 +1138,22 @@ print.esem_invariance <- function(x, ...) {
     rot_args <- list(orthogonal = TRUE, target = btgt_na, rstarts = 30L)
   }
 
-  # -- Theta identification: match Mplus at configural AND weak ----------------
+  # -- Theta identification: match Mplus at weak -------------------------------
   #
-  # Mplus's Theta parameterization frees non-reference group residuals and
-  # factor means at EVERY level (including configural), with partial threshold
-  # equality constraints for identification.  lavaan's default keeps residuals
-  # = 1 and means = 0 in ALL groups, producing a chi-square gap of ~18 when
-  # group thresholds truly differ (same df, different constraints).
+  # At weak, Mplus frees the non-reference residuals and factor means and
+  # identifies them through partial threshold equalities; lavaan's default
+  # keeps residuals = 1 and means = 0 in ALL groups, a different model with
+  # the same df (chi-square gap of ~18 when group thresholds truly differ).
   #
-  # Applied at configural and weak (strong/strict handled separately below):
+  # Not at configural: with free loadings the equated threshold is an item's
+  # only cross-group link, and when it sits near zero in a non-reference group
+  # the item's residual variance is empirically unidentified (bfi O5: 333 in
+  # R, 145 in Mplus at a tight tolerance; chi-square 14 units apart at the
+  # default tolerances). The standard identification (residuals 1, means 0,
+  # thresholds free in every group) is the equivalent, well-conditioned model;
+  # both programs then agree to about one chi-square unit.
+  #
+  # Applied at weak (strong/strict handled separately below):
   #   1. Free residuals in non-reference group: item ~~ c(1, NA)*item
   #   2. Free factor means in non-reference group: F ~ c(0, NA)*1
   #   3. Partial threshold constraints for identification:
@@ -743,9 +1161,8 @@ print.esem_invariance <- function(x, ...) {
   #      - Non-referent items: 1 threshold constrained equal
   #
   # Net df change = 0: freed residuals + freed means = threshold constraints.
-  needs_theta_id <- is_configural ||
-    (!is.null(group_equal) && "loadings" %in% group_equal &&
-     !("thresholds" %in% group_equal))
+  needs_theta_id <- !is_configural && !is.null(group_equal) &&
+    "loadings" %in% group_equal && !("thresholds" %in% group_equal)
 
   if (needs_theta_id && n_groups >= 2L) {
 
@@ -822,29 +1239,19 @@ print.esem_invariance <- function(x, ...) {
     # Theta parameterization silently fixes ALL groups' residuals to 1 when all
     # thresholds are explicitly constrained equal, which adds 18 hidden constraints
     # at strong and makes strict indistinguishable from strong.
+    # Covariances and means are written explicitly below, so their group.equal
+    # tokens are dropped too; "lv.variances" stays for lavaan to pin the
+    # non-reference variances back at 1.
     has_residuals <- "residuals" %in% group_equal
-    group_equal   <- setdiff(group_equal, c("thresholds", "residuals"))
+    group_equal   <- setdiff(group_equal,
+                             c("thresholds", "residuals", "lv.covariances", "means"))
 
     # All thresholds equal: item | c(lbl,lbl)*t1 + c(lbl,lbl)*t2 + ...
     # The part AFTER '*' must be a POSITIONAL indicator (t1, t2, ...) -- not an
     # arbitrary name.  Using any other token causes lavaan to fail with a C-level
     # "subscript out of bounds" error when it tries to look up the threshold index.
-    thresh_lines <- character(0)
-    lbl_n <- 1L
-    for (it in spec$all_items) {
-      n_thr <- length(unique(na.omit(spec$data[[it]]))) - 1L
-      if (n_thr == 0L) next
-      parts <- character(n_thr)
-      for (k in seq_len(n_thr)) {
-        lbl     <- paste0("ethr", lbl_n)
-        grp_lbl <- paste(rep(lbl, n_groups), collapse = ", ")
-        parts[k] <- paste0("c(", grp_lbl, ")*t", k)   # t1, t2, t3, t4 (positional)
-        lbl_n <- lbl_n + 1L
-      }
-      thresh_lines <- c(thresh_lines,
-        paste0(it, " | ", paste(parts, collapse = " + ")))
-    }
-    model_syntax <- paste(c(model_syntax, thresh_lines), collapse = "\n")
+    pl <- .ordered_partial_lines(spec, n_groups, has_residuals, group_partial)
+    model_syntax <- paste(c(model_syntax, pl$thresholds), collapse = "\n")
 
     # Free factor means in group 2+ (Mplus strong: MODEL FEMALE has [G*] [EX*] etc.)
     # With explicit threshold equality the scale is fully identified, so factor means
@@ -852,7 +1259,9 @@ print.esem_invariance <- function(x, ...) {
     # lavaan's std.lv=TRUE + group.equal="thresholds" would do this automatically,
     # but since we bypassed "thresholds", we add it explicitly.
     # Syntax: "F ~ c(0, NA, NA, ...)*1" -- 0 in reference group, NA (free) elsewhere.
-    grp_spec_mean <- paste(c("0", rep("NA", n_groups - 1L)), collapse = ", ")
+    # Latent mean invariance: the non-reference means go back to 0.
+    grp_spec_mean <- paste(c("0", rep(if (fix_means) "0" else "NA", n_groups - 1L)),
+                           collapse = ", ")
     mean_lines <- vapply(all_factor_names, function(f) {
       paste0(f, " ~ c(", grp_spec_mean, ")*1")
     }, character(1L))
@@ -868,15 +1277,7 @@ print.esem_invariance <- function(x, ...) {
     # Strict (Mplus): residuals equal across groups (both = 1, from Theta).
     #   -> c(1, 1) explicitly fixes both = 1, equivalent to residual equality.
     #   -> +18 constraints vs strong -> df_strict = df_strong + 18.
-    res_vals <- if (has_residuals) {
-      paste(rep("1", n_groups), collapse = ", ")             # strict: both fixed = 1
-    } else {
-      paste(c("1", rep("NA", n_groups - 1L)), collapse = ", ")  # strong: non-ref free
-    }
-    res_lines <- vapply(spec$all_items, function(it) {
-      paste0(it, " ~~ c(", res_vals, ")*", it)
-    }, character(1L))
-    model_syntax <- paste(c(model_syntax, res_lines), collapse = "\n")
+    model_syntax <- paste(c(model_syntax, pl$residuals), collapse = "\n")
   }
 
   cfa_args <- list(
@@ -891,7 +1292,7 @@ print.esem_invariance <- function(x, ...) {
   )
   if (!is.null(spec$group))  cfa_args$group       <- spec$group
   if (!is.null(group_equal)) cfa_args$group.equal <- group_equal
-  cfa_args <- c(cfa_args, list(...))
+  cfa_args <- c(cfa_args, dots)
 
   fit <- .muffle_rotated_vcov(tryCatch(
     do.call(lavaan::cfa, cfa_args),
@@ -917,6 +1318,12 @@ print.esem_invariance <- function(x, ...) {
 
 
 .fit_esem_inv_ordered <- function(spec, group_equal, missing, ...) {
+  # lavaan-style group.partial labels ("x9|t3", "x9~~x9") are honoured by the
+  # threshold/residual writer below: the explicit equality labels written there
+  # would otherwise defeat lavaan's own group.partial.
+  dots <- list(...)
+  group_partial <- dots$group.partial
+  dots$group.partial <- NULL
 
   tgt    <- unclass(spec$target)        # strip esem_target S3 class
   tgt_na <- tgt
@@ -927,6 +1334,9 @@ print.esem_invariance <- function(x, ...) {
   model_syntax <- paste0(lhs, " =~ ", paste(spec$all_items, collapse = " + "))
 
   is_configural <- is.null(group_equal)
+  # Levels 5/6 of esem_invariance(): latent var/cov and latent mean invariance.
+  fix_varcov <- !is.null(group_equal) && "lv.variances" %in% group_equal
+  fix_means  <- !is.null(group_equal) && "means"        %in% group_equal
   n_groups <- if (!is.null(spec$group_levels)) {
     length(spec$group_levels)
   } else if (!is.null(spec$group)) {
@@ -940,10 +1350,10 @@ print.esem_invariance <- function(x, ...) {
   # reproducibility on complex multi-group fits.
   rot_args <- list(orthogonal = FALSE, target = tgt_na, rstarts = 30L)
 
-  # -- Theta identification fix at configural and weak -------------------------
-  needs_theta_id <- is_configural ||
-    (!is.null(group_equal) && "loadings" %in% group_equal &&
-     !("thresholds" %in% group_equal))
+  # -- Theta identification fix at weak (why not configural: see the same
+  # block in .fit_besem_inv_ordered) --------------------------------------------
+  needs_theta_id <- !is_configural && !is.null(group_equal) &&
+    "loadings" %in% group_equal && !("thresholds" %in% group_equal)
 
   if (needs_theta_id && n_groups >= 2L) {
 
@@ -987,41 +1397,23 @@ print.esem_invariance <- function(x, ...) {
   # -- Strong/Strict: full explicit threshold labelling + residual control -----
   if (!is_configural && !is.null(group_equal) && "thresholds" %in% group_equal) {
 
+    # Means are written explicitly below; lv.variances / lv.covariances stay
+    # for lavaan (they pin the non-reference unrotated Phi back to identity).
     has_residuals <- "residuals" %in% group_equal
-    group_equal   <- setdiff(group_equal, c("thresholds", "residuals"))
+    group_equal   <- setdiff(group_equal, c("thresholds", "residuals", "means"))
 
-    thresh_lines <- character(0)
-    lbl_n <- 1L
-    for (it in spec$all_items) {
-      n_thr <- length(unique(na.omit(spec$data[[it]]))) - 1L
-      if (n_thr == 0L) next
-      parts <- character(n_thr)
-      for (k in seq_len(n_thr)) {
-        lbl     <- paste0("ethr", lbl_n)
-        grp_lbl <- paste(rep(lbl, n_groups), collapse = ", ")
-        parts[k] <- paste0("c(", grp_lbl, ")*t", k)
-        lbl_n <- lbl_n + 1L
-      }
-      thresh_lines <- c(thresh_lines,
-        paste0(it, " | ", paste(parts, collapse = " + ")))
-    }
-    model_syntax <- paste(c(model_syntax, thresh_lines), collapse = "\n")
+    pl <- .ordered_partial_lines(spec, n_groups, has_residuals, group_partial)
+    model_syntax <- paste(c(model_syntax, pl$thresholds), collapse = "\n")
 
-    grp_spec_mean <- paste(c("0", rep("NA", n_groups - 1L)), collapse = ", ")
+    # Latent mean invariance: the non-reference means go back to 0.
+    grp_spec_mean <- paste(c("0", rep(if (fix_means) "0" else "NA", n_groups - 1L)),
+                           collapse = ", ")
     mean_lines <- vapply(all_factor_names, function(f) {
       paste0(f, " ~ c(", grp_spec_mean, ")*1")
     }, character(1L))
     model_syntax <- paste(c(model_syntax, mean_lines), collapse = "\n")
 
-    res_vals <- if (has_residuals) {
-      paste(rep("1", n_groups), collapse = ", ")
-    } else {
-      paste(c("1", rep("NA", n_groups - 1L)), collapse = ", ")
-    }
-    res_lines <- vapply(spec$all_items, function(it) {
-      paste0(it, " ~~ c(", res_vals, ")*", it)
-    }, character(1L))
-    model_syntax <- paste(c(model_syntax, res_lines), collapse = "\n")
+    model_syntax <- paste(c(model_syntax, pl$residuals), collapse = "\n")
   }
 
   cfa_args <- list(
@@ -1036,7 +1428,7 @@ print.esem_invariance <- function(x, ...) {
   )
   if (!is.null(spec$group))  cfa_args$group       <- spec$group
   if (!is.null(group_equal)) cfa_args$group.equal <- group_equal
-  cfa_args <- c(cfa_args, list(...))
+  cfa_args <- c(cfa_args, dots)
 
   fit <- .muffle_rotated_vcov(tryCatch(
     do.call(lavaan::cfa, cfa_args),
@@ -1073,6 +1465,9 @@ print.esem_invariance <- function(x, ...) {
   model_syntax <- paste0(lhs, " =~ ", paste(spec$all_items, collapse = " + "))
 
   is_configural <- is.null(group_equal)
+  # Levels 5/6 of esem_invariance(): latent var/cov and latent mean invariance.
+  fix_varcov <- !is.null(group_equal) && "lv.variances" %in% group_equal
+  fix_means  <- !is.null(group_equal) && "means"        %in% group_equal
   n_groups <- if (!is.null(spec$group_levels)) {
     length(spec$group_levels)
   } else if (!is.null(spec$group)) {
@@ -1088,12 +1483,17 @@ print.esem_invariance <- function(x, ...) {
     # Fix: keep orthogonal=TRUE and add explicit c(0, NA)* for every factor pair.
     # The explicit NA for group 2+ overrides the rotation's global constraint.
     # NOTE: oblique rotation does NOT work — the rotation silently overrides c(0,NA)*.
-    grp_spec  <- paste(c("0", rep("NA", n_groups - 1L)), collapse = ", ")
+    # Latent var/cov invariance: the non-reference covariances go back to 0
+    # (explicit, so the group.equal token is dropped); latent means are left
+    # to lavaan's "means" handling.
+    grp_spec  <- paste(c("0", rep(if (fix_varcov) "0" else "NA", n_groups - 1L)),
+                       collapse = ", ")
     fac_pairs <- combn(all_factor_names, 2L, simplify = FALSE)
     cov_lines <- vapply(fac_pairs,
       function(p) paste0(p[1L], " ~~ c(", grp_spec, ")*", p[2L]),
       character(1L))
     model_syntax <- paste(c(model_syntax, cov_lines), collapse = "\n")
+    group_equal  <- setdiff(group_equal, "lv.covariances")
     rot_args <- list(orthogonal = TRUE, target = btgt_na)
   } else {
     rot_args <- list(orthogonal = TRUE, target = btgt_na)
@@ -1147,20 +1547,8 @@ print.esem_invariance <- function(x, ...) {
   fm  <- tryCatch(lavaan::fitMeasures(lav), error = function(e) NULL)
   if (is.null(fm)) return(na_row)
 
-  # Mplus WLSMV SRMR uses n_pairs + n_thresholds in denominator (threshold
-  # residuals = 0 but inflate denominator).  lavaan uses only n_pairs.
-  # Apply same correction as in .build_comparison_table().
-  srmr_corrected <- tryCatch({
-    wls_obs <- lavaan::lavInspect(lav, "wls.obs")
-    if (is.list(wls_obs)) wls_obs <- wls_obs[[1L]]
-    n_wls   <- length(wls_obs)
-    cor_ov  <- lavaan::lavInspect(lav, "cor.ov")
-    if (is.list(cor_ov)) cor_ov <- cor_ov[[1L]]
-    n_items <- nrow(cor_ov)
-    n_pairs <- n_items * (n_items - 1L) / 2L
-    srmr_raw <- unname(fm["srmr"])
-    if (n_wls > n_pairs) srmr_raw * sqrt(n_pairs / n_wls) else srmr_raw
-  }, error = function(e) unname(fm["srmr"]))
+  # SRMR by the Mplus definition (.srmr_mplus()); lavaan's value as fallback.
+  srmr_corrected <- tryCatch(.srmr_mplus(lav), error = function(e) unname(fm["srmr"]))
 
   # RMSEA 90% CI -- read from lavaan fitMeasures, fallback to .rmsea_ci().
   # `lo_keys`/`hi_keys` are character vectors so we try both lavaan spellings:
@@ -1248,7 +1636,8 @@ print.esem_invariance <- function(x, ...) {
             rmsea = NA_real_, rmsea_lo = NA_real_, rmsea_hi = NA_real_, srmr = NA_real_)
 
   # Map from level name to the lrt_results key that compares it vs previous level
-  lrt_key <- c(weak = "weak", strong = "strong", strict = "strict")
+  lrt_key <- c(weak = "weak", strong = "strong", strict = "strict",
+               varcov = "varcov", means = "means")
 
   for (lv in levels) {
     fi <- .extract_fit_inv(fits[[lv]])
@@ -1374,8 +1763,10 @@ print.esem_invariance <- function(x, ...) {
 
 #' Generate, Run, and Compare B-ESEM Invariance Models Against Mplus
 #'
-#' Creates complete Mplus \code{.inp} files for configural, weak, strong, and
-#' strict invariance, runs them via \pkg{MplusAutomation}, then prints a
+#' Creates complete Mplus \code{.inp} files for every level fitted in
+#' \code{inv} (configural, weak, strong, strict and, when
+#' \code{esem_invariance()} was run with \code{through}, latent var/cov and
+#' latent means), runs them via \pkg{MplusAutomation}, then prints a
 #' side-by-side comparison of fit statistics against the R results from
 #' \code{\link{esem_invariance}}.
 #'
@@ -1482,12 +1873,11 @@ run_mplus_besem_invariance <- function(inv,
   by_block <- .besem_by_lines(spec, mp_items, factor_names_spec)
 
   # -- Generate and write one .inp per level -----------------------------------
-  levels    <- c("configural", "weak", "strong", "strict")
+  # Mirror the levels fitted in R (through = "varcov" / "means" adds two).
+  levels    <- names(inv$models)
   inp_paths <- setNames(file.path(folder, paste0("besem_inv_", levels, ".inp")), levels)
-  diff_files <- c(configural = NA,
-                  weak       = "besem_inv_configural.dat",
-                  strong     = "besem_inv_weak.dat",
-                  strict     = "besem_inv_strong.dat")
+  diff_files <- setNames(c(NA, paste0("besem_inv_", levels[-length(levels)], ".dat")),
+                         levels)
   save_files <- paste0("besem_inv_", levels, ".dat")
 
   # Build wrapped variable list lines (Mplus 90-char limit; use 85 to be safe)
@@ -1540,12 +1930,14 @@ run_mplus_besem_invariance <- function(inv,
   # -- Generate .inp, run, and retry on non-convergence (per level) -------------
   # WLSMV: run in order so DIFFTEST chain works.
   # ML: DIFFTEST is WLSMV-only; chi-square differences are computed by subtraction.
-  message("\n  Running Mplus (4 models)...")
+  message(sprintf("\n  Running Mplus (%d models)...", length(levels)))
   for (lv in levels) {
     message(sprintf("    %-12s ...", lv))
 
-    full_thresh  <- lv %in% c("strong", "strict")
-    strict_model <- lv == "strict"
+    full_thresh  <- lv %in% c("strong", "strict", "varcov", "means")
+    strict_model <- lv %in% c("strict", "varcov", "means")
+    fix_varcov   <- lv %in% c("varcov", "means")   # non-ref variances @1, covariances @0
+    fix_means    <- lv == "means"                  # non-ref factor means @0
     configural   <- lv == "configural"
 
     fac_all      <- c("G", factor_names_spec)
@@ -1553,11 +1945,26 @@ run_mplus_besem_invariance <- function(inv,
     fac_mean_ref <- paste(paste0("  [", fac_all, "@0];"), collapse = "\n")
     fac_var_fem  <- paste(paste0("  ", fac_all, "*;"),   collapse = "\n")
     fac_mean_fem <- paste(paste0("  [", fac_all, "*];"), collapse = "\n")
+    if (fix_varcov) {
+      # Mplus rejects "@0" (and bare "@1") on EFA-set parameters in a
+      # non-reference group; the technical-supplement form is equality labels
+      # on every covariance in both groups plus variances fixed at 1, which
+      # equates the non-reference covariances to the reference group's
+      # rotation-fixed zeros. (fac_var_ref is never used for a non-reference
+      # block at this level: fix_varcov and configural are exclusive.)
+      prs     <- combn(fac_all, 2L)
+      cov_lab <- sprintf("  %s WITH %s (c%d);", prs[1L, ], prs[2L, ], seq_len(ncol(prs)))
+      fac_var_ref <- paste(c(fac_var_ref, cov_lab), collapse = "\n")
+      fac_var_fem <- paste(c(paste0("  ", fac_all, "@1;"), cov_lab), collapse = "\n")
+    }
+    if (fix_means) fac_mean_fem <- fac_mean_ref
 
     if (is_ordered) {
       # -- WLSMV path (original logic) -----------------------------------------
-      thresh_ref <- .besem_thresh_lines(mp_items, n_thresh, refs2, full_thresh, grp = "ref")
-      thresh_fem <- .besem_thresh_lines(mp_items, n_thresh, refs2, full_thresh, grp = "fem")
+      thresh_ref <- .besem_thresh_lines(mp_items, n_thresh, refs2, full_thresh, grp = "ref",
+                                        configural = configural)
+      thresh_fem <- .besem_thresh_lines(mp_items, n_thresh, refs2, full_thresh, grp = "fem",
+                                        configural = configural)
 
       uniq_ref <- paste0("  ", mp_items[1], "-", mp_items[length(mp_items)], "@1;")
       uniq_fem <- if (strict_model)
@@ -1570,8 +1977,10 @@ run_mplus_besem_invariance <- function(inv,
       # invariance — they differ only in which group's parameters they bind).
       make_nonref_block <- function(g_label) {
         if (configural) {
-          paste(c(paste0("MODEL ", g_label, ":"), by_block, fac_var_ref, fac_mean_fem,
-                  thresh_fem, uniq_fem), collapse = "\n")
+          # Standard configural identification in every group: factor
+          # variances 1, factor means 0, residuals 1, all thresholds free.
+          paste(c(paste0("MODEL ", g_label, ":"), by_block, fac_var_ref, fac_mean_ref,
+                  thresh_fem, uniq_ref), collapse = "\n")
         } else {
           paste(c(paste0("MODEL ", g_label, ":"), fac_var_fem, fac_mean_fem,
                   thresh_fem, uniq_fem), collapse = "\n")
@@ -1583,7 +1992,8 @@ run_mplus_besem_invariance <- function(inv,
       make_inp <- function(conv_crit = NULL) {
         analysis_str <- paste0(analysis, .mplus_conv_lines(conv_crit))
         analysis_with_diff <- if (difftest && !is.na(diff_files[lv]))
-          paste0(analysis_str, "\n  DIFFTEST = ", diff_files[lv], ";")
+          paste0(analysis_str,
+                 .mplus_difftest_line(file.path(dirname(inp_paths[lv]), diff_files[lv])))
         else
           analysis_str
         var_lines <- Filter(nchar, c(names_line, use_line, miss_line, group_line, cat_line))
@@ -1672,7 +2082,7 @@ run_mplus_besem_invariance <- function(inv,
 
     out_path <- sub("\\.inp$", ".out", inp_paths[lv])
 
-    # Attempt 0: Mplus defaults
+    # Attempt 0: CONVERGENCE = 1e-6 (.mplus_conv_lines default)
     writeLines(make_inp(), inp_paths[lv])
     MplusAutomation::runModels(target = inp_paths[lv], Mplus_command = mplus_command,
                                 showOutput = FALSE, replaceOutfile = "always")
@@ -1685,11 +2095,12 @@ run_mplus_besem_invariance <- function(inv,
       message("  ERROR"); next
     }
 
-    # Attempts 1-7: progressively relaxed convergence (mirrors R .fit_with_retry)
+    # Retries: Mplus default, then progressively relaxed (mirrors R .fit_with_retry)
     converged_mplus <- FALSE
     for (i in seq_along(.MPLUS_CONV_RETRY)) {
       conv <- .MPLUS_CONV_RETRY[i]
-      message(sprintf("\n      [retry %d/7 conv=%.4f] ...", i, conv))
+      message(sprintf("\n      [retry %d/%d conv=%s] ...", i, length(.MPLUS_CONV_RETRY),
+                      format(conv, scientific = FALSE)))
       writeLines(make_inp(conv), inp_paths[lv])
       MplusAutomation::runModels(target = inp_paths[lv], Mplus_command = mplus_command,
                                   showOutput = FALSE, replaceOutfile = "always")
@@ -1819,17 +2230,20 @@ run_mplus_besem_invariance <- function(inv,
 
 .mp_names <- function(x) gsub(".", "_", x, fixed = TRUE)
 
-.besem_thresh_lines <- function(mp_items, n_thresh, refs2, full_equal, grp) {
+.besem_thresh_lines <- function(mp_items, n_thresh, refs2, full_equal, grp,
+                                configural = FALSE) {
   lines  <- character(0)
   t_num  <- 1L
   for (it in mp_items) {
     for (k in seq_len(n_thresh)) {
       lbl  <- paste0("t", t_num)
       tag  <- paste0("[", it, "$", k, "]")
-      # Decide whether this threshold gets a label
-      labeled <- full_equal ||
-                 k == 1L ||
-                 (k == 2L && it %in% refs2)
+      # Decide whether this threshold gets a label (none at configural: the
+      # standard identification keeps every threshold free in every group)
+      labeled <- !configural &&
+                 (full_equal ||
+                  k == 1L ||
+                  (k == 2L && it %in% refs2))
       line <- if (labeled) paste0("  ", tag, " (", lbl, ");")
               else          paste0("  ", tag, ";")
       lines  <- c(lines, line)
@@ -1847,4 +2261,36 @@ run_mplus_besem_invariance <- function(inv,
       return(as.numeric(v))
   }
   NA_real_
+}
+
+
+# Internal: threshold and residual lines of the strong/strict ordered models.
+# All thresholds are equal across groups through explicit labels (the part
+# after "*" must stay the positional t1, t2, ...); lavaan-style group.partial
+# labels release them: "x9|t3" leaves that threshold free in every group,
+# "x9~~x9" (strict) frees the item's residual in the non-reference groups.
+# An item whose thresholds are all released gets its residual fixed to 1 in
+# every group (theta identification).
+.ordered_partial_lines <- function(spec, n_groups, has_residuals, group_partial = NULL) {
+  thresh_lines <- character(0)
+  res_lines    <- character(0)
+  lbl_n <- 1L
+  for (it in spec$all_items) {
+    n_thr <- length(unique(na.omit(spec$data[[it]]))) - 1L
+    if (n_thr == 0L) next
+    parts <- character(n_thr)
+    freed <- paste0(it, "|t", seq_len(n_thr)) %in% group_partial
+    for (k in seq_len(n_thr)) {
+      lbl     <- paste0("ethr", lbl_n)
+      grp_lbl <- paste(rep(lbl, n_groups), collapse = ", ")
+      parts[k] <- if (freed[k]) paste0("t", k) else paste0("c(", grp_lbl, ")*t", k)
+      lbl_n <- lbl_n + 1L
+    }
+    thresh_lines <- c(thresh_lines, paste0(it, " | ", paste(parts, collapse = " + ")))
+    res_free <- paste0(it, "~~", it) %in% group_partial
+    non_ref  <- if (all(freed) || (has_residuals && !res_free)) "1" else "NA"
+    res_lines <- c(res_lines,
+      paste0(it, " ~~ c(", paste(c("1", rep(non_ref, n_groups - 1L)), collapse = ", "), ")*", it))
+  }
+  list(thresholds = thresh_lines, residuals = res_lines)
 }

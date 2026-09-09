@@ -35,13 +35,13 @@ search. Default \code{30L} (matches Mplus).}
 \value{
 An object of class \code{"esem_comparison_pipeline"} containing:
 \describe{
-  \item{\code{spec}}{The original model specification.}
-  \item{\code{fit_cfa}}{lavaan CFA fit object.}
-  \item{\code{fit_esem}}{esem_fit object.}
-  \item{\code{fit_besem}}{besem_fit object.}
-  \item{\code{alignment}}{alignment_check result (if run).}
-  \item{\code{comparison_table}}{Data frame of fit indices.}
-  \item{\code{mplus_results}}{List of Mplus readModels results (if run).}
+\item{\code{spec}}{The original model specification.}
+\item{\code{fit_cfa}}{lavaan CFA fit object.}
+\item{\code{fit_esem}}{esem_fit object.}
+\item{\code{fit_besem}}{besem_fit object.}
+\item{\code{alignment}}{alignment_check result (if run).}
+\item{\code{comparison_table}}{Data frame of fit indices.}
+\item{\code{mplus_results}}{List of Mplus readModels results (if run).}
 }
 }
 \description{

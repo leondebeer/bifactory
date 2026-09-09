@@ -18,9 +18,9 @@ present in \code{x$models}.}
 }
 \value{
 A data frame of class \code{"chisq_decomp"} with columns
-  \code{level}, \code{group}, \code{chisq_R} (rescaled to scaled scale), and
-  when \code{mplus_dir} is supplied, \code{mplus_group}, \code{chisq_M},
-  \code{delta}.
+\code{level}, \code{group}, \code{chisq_R} (rescaled to scaled scale), and
+when \code{mplus_dir} is supplied, \code{mplus_group}, \code{chisq_M},
+\code{delta}.
 }
 \description{
 Extracts the per-group contribution to the WLSMV (or ML) chi-square at each

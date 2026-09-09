@@ -2,7 +2,7 @@
 % Please edit documentation in R/ordered_esem.R
 \name{esem_ordered}
 \alias{esem_ordered}
-\title{ESEM for Ordered-Categorical (Likert) Data}
+\title{ESEM for Ordinal (Likert) Data}
 \usage{
 esem_ordered(
   data,
@@ -80,19 +80,17 @@ use \code{std_rotated_loadings}, \code{wlsmv_stats}, and
 \code{"DWLS"} depending on path.
 }
 \description{
-Fits ESEM on ordered-categorical indicators (WLSMV / Theta parameterization).
+Fits ESEM on ordinal indicators (WLSMV / Theta parameterization).
 Called automatically from \code{\link{esem}} when \code{ordered} is set.
 }
 \details{
-**Default** (\code{method = "lavaan"}): lavaan's \code{efa()} block with WLSMV
+\strong{Default} (\code{method = "lavaan"}): lavaan's \code{efa()} block with WLSMV
 (unrestricted model, post-hoc rotation, delta-method SEs)---aligned with Mplus
 \code{ESTIMATOR = WLSMV; ROTATION = TARGET (oblique)}.
 
-**Alternate** (\code{method = "rotation"}): custom DWLS pipeline (polychoric
+\strong{Alternate} (\code{method = "rotation"}): custom DWLS pipeline (polychoric
 correlations via \pkg{psych}, \pkg{GPArotation}, sandwich + rotation Jacobian SEs).
-
-
-## Mplus equivalence
+\subsection{Mplus equivalence}{
 
 \preformatted{
 Mplus:
@@ -107,36 +105,39 @@ R (this function):
   esem_ordered(data, nfactors = 3, rotation = "target", target = tgt,
                factor_names = c("EX","MD","CI"))
 }
+}
 
-## Algorithm (\code{method = "lavaan"})
+\subsection{Algorithm (\code{method = "lavaan"})}{
+
 lavaan's \code{efa()} block fits an unrestricted k-factor model under WLSMV,
 applies post-hoc rotation, and propagates standard errors through the rotation
 transformation (Asparouhov & Muthen, 2009).
 }
+}
 \section{Estimator paths}{
 
 \describe{
-  \item{Continuous ESEM / B-ESEM}{
-    \code{\link{esem}} and \code{\link{besem}} use \code{lavaan::cfa()} with a
-    native \code{efa()} block (integrated MLR estimation and rotation).
-  }
-  \item{Ordered ESEM}{
-    \code{esem(ordered = ...)} calls \code{\link{esem_ordered}}. Default
-    \code{method = "lavaan"} (lavaan WLSMV, \code{efa()} block, post-hoc rotation).
-    \code{method = "rotation"} uses a custom DWLS pipeline (polychoric correlations
-    + \pkg{GPArotation}).
-  }
-  \item{Ordered B-ESEM}{
-    \code{besem(ordered = ...)} calls \code{\link{besem_ordered}}. Default
-    \code{method = "rotation"} (custom DWLS/WLSMV + orthogonal \code{targetT}; this
-    is what \code{\link{run_comparison}} uses for ordered data). \code{method = "set-esem"}
-    fits a lavaan WLSMV bifactor **CFA** with non-primary specific loadings fixed at
-    zero; it does **not** match Mplus B-ESEM loadings.
-  }
-  \item{Multi-group invariance}{
-    \code{\link{esem_invariance}} uses lavaan multi-group \code{efa()} models plus
-    explicit syntax patches for ordered B-ESEM. See that help page for scope limits.
-  }
+\item{Continuous ESEM / B-ESEM}{
+\code{\link{esem}} and \code{\link{besem}} use \code{lavaan::cfa()} with a
+native \code{efa()} block (integrated MLR estimation and rotation).
+}
+\item{Ordered ESEM}{
+\code{esem(ordered = ...)} calls \code{\link{esem_ordered}}. Default
+\code{method = "lavaan"} (lavaan WLSMV, \code{efa()} block, post-hoc rotation).
+\code{method = "rotation"} uses a custom DWLS pipeline (polychoric correlations
++ \pkg{GPArotation}).
+}
+\item{Ordered B-ESEM}{
+\code{besem(ordered = ...)} calls \code{\link{besem_ordered}}. Default
+\code{method = "rotation"} (custom DWLS/WLSMV + orthogonal \code{targetT}; this
+is what \code{\link{run_comparison}} uses for ordered data). \code{method = "set-esem"}
+fits a lavaan WLSMV bifactor \strong{CFA} with non-primary specific loadings fixed at
+zero; it does \strong{not} match Mplus B-ESEM loadings.
+}
+\item{Multi-group invariance}{
+\code{\link{esem_invariance}} uses lavaan multi-group \code{efa()} models plus
+explicit syntax patches for ordered B-ESEM. See that help page for scope limits.
+}
 }
 }
 
@@ -145,12 +146,12 @@ transformation (Asparouhov & Muthen, 2009).
 Defaults differ by entry point; pass \code{missing} explicitly when fitting ESEM and
 B-ESEM separately on the same ordered dataset.
 \itemize{
-  \item \code{\link{specify_model}} / \code{\link{run_comparison}}: \code{"pairwise"}
-    for ordered data, \code{"listwise"} for continuous.
-  \item \code{\link{esem_ordered}}: \code{"pairwise"}.
-  \item \code{\link{besem_ordered}}: \code{"listwise"} (pipeline still passes
-    \code{missing} from the spec when used via \code{run_comparison}).
-  \item \code{\link{esem}} / \code{\link{besem}} (continuous): \code{"listwise"}.
+\item \code{\link{specify_model}} / \code{\link{run_comparison}}: \code{"pairwise"}
+for ordered data, \code{"listwise"} for continuous.
+\item \code{\link{esem_ordered}}: \code{"pairwise"}.
+\item \code{\link{besem_ordered}}: \code{"listwise"} (pipeline still passes
+\code{missing} from the spec when used via \code{run_comparison}).
+\item \code{\link{esem}} / \code{\link{besem}} (continuous): \code{"listwise"}.
 }
 }
 
@@ -158,7 +159,7 @@ B-ESEM separately on the same ordered dataset.
 
 For \code{\link{besem_ordered}(method = "rotation")} and
 \code{\link{esem_ordered}(method = "rotation")}, \code{$lavaan_fit} is often an
-**auxiliary** one-factor WLSMV CFA used only to extract DWLS weight matrices---not
+\strong{auxiliary} one-factor WLSMV CFA used only to extract DWLS weight matrices---not
 the fitted ESEM/B-ESEM model. Use \code{\link{std_loadings}}, \code{\link{parameters}},
 and \code{\link[lavaan:fitMeasures]{fitMeasures}(x)} on the \code{esem_fit} wrapper;
 \code{\link[lavaan:fitMeasures]{fitMeasures}(x)} reads \code{wlsmv_stats} when present.
@@ -216,5 +217,5 @@ modeling. \emph{Structural Equation Modeling, 16}(3), 397--438.
 }
 \seealso{
 \code{\link{esem}} for continuous data,
-  \code{\link{besem_ordered}} for bifactor ordered ESEM.
+\code{\link{besem_ordered}} for bifactor ordered ESEM.
 }

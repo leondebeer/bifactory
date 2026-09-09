@@ -7,15 +7,18 @@
 # values they show line up with fit_indices() / .build_comparison_table().
 # For WLSMV/MLR/MLM/DWLS lavaan reports both naive and scaled versions; the
 # scaled ones are the Mplus-comparable, correctly-corrected statistics.
-# Also applies the n_pairs/n_wls SRMR correction (Mplus denominator includes
-# threshold residuals, which lavaan omits).
+# SRMR follows the Mplus definition (.srmr_mplus()).
 #
 # Returns a named numeric vector with chisq, df, pvalue, cfi, tli, rmsea,
 # rmsea.ci.lower, rmsea.ci.upper, srmr, npar -- or NULL if extraction fails.
 .fit_indices_lav <- function(lav) {
-  est <- tryCatch(lavaan::lavInspect(lav, "options")$estimator,
-                  error = function(e) "")
-  has_scaled <- grepl("DWLS|WLSMV|MLR|MLM|WLSM", est, ignore.case = TRUE)
+  fm <- tryCatch(lavaan::fitMeasures(lav), error = function(e) NULL)
+  if (is.null(fm)) return(NULL)
+
+  # Robust (MLR / MLM / WLSMV ...) fits carry scaled measures; lavaan stores
+  # MLR as estimator "ML" plus a robust test, so key off the measures, not the
+  # estimator string.
+  has_scaled <- "chisq.scaled" %in% names(fm)
 
   keys <- if (has_scaled)
     c(npar = "npar",
@@ -23,17 +26,14 @@
       cfi = "cfi.scaled", tli = "tli.scaled", rmsea = "rmsea.scaled",
       rmsea.ci.lower = "rmsea.scaled.ci.lower",
       rmsea.ci.upper = "rmsea.scaled.ci.upper",
-      srmr = "srmr")
+      srmr = "srmr", aic = "aic", bic = "bic", bic2 = "bic2")
   else
     c(npar = "npar",
       chisq = "chisq", df = "df", pvalue = "pvalue",
       cfi = "cfi", tli = "tli", rmsea = "rmsea",
       rmsea.ci.lower = "rmsea.ci.lower",
       rmsea.ci.upper = "rmsea.ci.upper",
-      srmr = "srmr")
-
-  fm <- tryCatch(lavaan::fitMeasures(lav), error = function(e) NULL)
-  if (is.null(fm)) return(NULL)
+      srmr = "srmr", aic = "aic", bic = "bic", bic2 = "bic2")
 
   out <- vapply(keys, function(k)
     if (k %in% names(fm)) unname(fm[[k]]) else NA_real_, 0.0)
@@ -48,22 +48,8 @@
       out["rmsea.ci.upper"] <- unname(fm[["rmsea.ci.upper.scaled"]])
   }
 
-  if (has_scaled && !is.na(out["srmr"])) {
-    wls_obs <- tryCatch(lavaan::lavInspect(lav, "wls.obs"),
-                        error = function(e) NULL)
-    if (!is.null(wls_obs)) {
-      if (is.list(wls_obs)) wls_obs <- wls_obs[[1L]]
-      n_wls  <- length(wls_obs)
-      cor_ov <- tryCatch(lavaan::lavInspect(lav, "cor.ov"),
-                         error = function(e) NULL)
-      if (!is.null(cor_ov)) {
-        if (is.list(cor_ov)) cor_ov <- cor_ov[[1L]]
-        n_items <- nrow(cor_ov)
-        n_pairs <- n_items * (n_items - 1L) / 2L
-        if (n_wls > n_pairs) out["srmr"] <- out["srmr"] * sqrt(n_pairs / n_wls)
-      }
-    }
-  }
+  if (!is.na(out["srmr"]))
+    out["srmr"] <- tryCatch(.srmr_mplus(lav), error = function(e) out[["srmr"]])
   out
 }
 
@@ -522,18 +508,13 @@ parameters <- function(x,
     }
     if (inherits(fit_obj, "esem_fit") || inherits(fit_obj, "lavaan")) {
       lav <- if (inherits(fit_obj, "esem_fit")) fit_obj$lavaan_fit else fit_obj
-      # WLSMV/DWLS/MLR -> .scaled variants (Mplus-matched); plain ML -> plain.
-      est_ok <- tryCatch(lavaan::lavInspect(lav, "options")$estimator,
-                         error = function(e) "")
-      has_scaled <- grepl("DWLS|WLSMV|MLR|MLM|WLSM", est_ok, ignore.case = TRUE)
-      keys <- if (has_scaled)
-        c("chisq.scaled","df.scaled","cfi.scaled","tli.scaled","rmsea.scaled","srmr")
-      else
-        c("chisq","df","cfi","tli","rmsea","srmr")
-      fi <- tryCatch(lavaan::fitMeasures(lav, keys), error = function(e) NULL)
+      # Shared helper: scaled (MLR / WLSMV) statistics and the Mplus SRMR
+      # denominator, so this line agrees with the comparison table.
+      fi <- .fit_indices_lav(lav)
       if (!is.null(fi))
         return(sprintf(" X2(%g)=%.3f  CFI=%.3f  TLI=%.3f  RMSEA=%.3f  SRMR=%.3f",
-                       fi[2], fi[1], fi[3], fi[4], fi[5], fi[6]))
+                       fi[["df"]], fi[["chisq"]], fi[["cfi"]], fi[["tli"]],
+                       fi[["rmsea"]], fi[["srmr"]]))
     }
     NULL
   }
@@ -611,12 +592,7 @@ print.bifactory_parameters <- function(x, ...) {
     ifelse(p < .10,  ".  ", "   ")))))
   }
 
-  # Detect ANSI colour support: RStudio sets RSTUDIO env var; also check TERM
-  use_colour <- isTRUE(highlight_primary) && (
-    nzchar(Sys.getenv("RSTUDIO")) ||
-    (!identical(Sys.getenv("TERM"), "dumb") && nzchar(Sys.getenv("TERM"))) ||
-    isTRUE(getOption("bifactory.ansi_colour"))
-  )
+  use_colour <- isTRUE(highlight_primary) && .ansi_colour()
   col_on  <- if (use_colour) "\033[34m" else ""  # blue for primary loadings
   col_off <- if (use_colour) "\033[0m"  else ""
 
@@ -797,4 +773,14 @@ std_loadings <- function(x, digits = 3, suppress = 0) {
     lmat[abs(lmat) < suppress] <- NA_real_
 
   lmat
+}
+
+
+# ANSI colour support: RStudio sets RSTUDIO; otherwise a TERM that is not
+# "dumb"; option bifactory.ansi_colour = TRUE / FALSE overrides both.
+.ansi_colour <- function() {
+  opt <- getOption("bifactory.ansi_colour")
+  if (!is.null(opt)) return(isTRUE(opt))
+  nzchar(Sys.getenv("RSTUDIO")) ||
+    (!identical(Sys.getenv("TERM"), "dumb") && nzchar(Sys.getenv("TERM")))
 }

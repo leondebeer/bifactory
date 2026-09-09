@@ -42,7 +42,7 @@
 #'   Use \code{"WLSMV"} for ordered indicators.
 #' @param std.lv Logical. Fix factor variances to 1 for identification?
 #'   Default \code{TRUE} (recommended for ESEM).
-#' @param ordered Character vector of ordered-categorical item names.
+#' @param ordered Character vector of ordinal item names.
 #'   When non-\code{NULL}, routes to \code{\link{esem_ordered}} (WLSMV). Default
 #'   \code{method} there is \code{"lavaan"}; see \code{?esem_ordered} for the
 #'   custom \code{"rotation"} path.
@@ -105,7 +105,7 @@
 #'
 #' @seealso
 #' \code{\link{make_target}} for target matrices,
-#' \code{\link{esem_ordered}} for ordered-categorical data,
+#' \code{\link{esem_ordered}} for ordinal data,
 #' \code{\link{esem_compare}} for ESEM vs CFA comparison,
 #' \code{\link{std_loadings}} for the standardised loading matrix.
 #'
@@ -195,7 +195,7 @@ esem <- function(data,
   # Route automatically to esem_ordered() which implements the set-ESEM pipeline
   # (polychoric correlations -> EFA rotation -> WLSMV CFA), matching Mplus behaviour.
   if (!is.null(ordered)) {
-    message("Ordered indicators detected. lavaan's efa() block does not support ",
+    message("Ordinal indicators detected. lavaan's efa() block does not support ",
             "WLSMV rotation.\nRouting to esem_ordered() (set-ESEM + WLSMV pipeline).")
     return(esem_ordered(
       data         = data,

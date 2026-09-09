@@ -18,18 +18,20 @@ referents are selected automatically via \code{\link{find_ewc_referents}}.}
 
 \item{var_fixed}{Logical.  Identification mode:
 \describe{
-  \item{\code{TRUE} (default)}{Factor variances fixed to 1 (\code{std.lv = TRUE}).
-    Only referent cross-loadings on other factors are fixed.
-    Mirrors Mplus \code{EX\@1; MD\@1; CI\@1;}.}
-  \item{\code{FALSE}}{Factor variances freely estimated.
-    Referent's own primary loading is \emph{also} fixed for identification.
-    Mirrors Mplus \code{EX*; MD*; CI*;}.}
-}}
+\item{\code{TRUE} (default)}{Factor variances fixed to 1 (\code{std.lv = TRUE}).
+Only referent cross-loadings on other factors are fixed.
+Mirrors Mplus \code{EX\@1; MD\@1; CI\@1;}.}
+\item{\code{FALSE}}{Factor variances freely estimated.
+Referent's own primary loading is \emph{also} fixed for identification.
+Mirrors Mplus \code{EX*; MD*; CI*;}.}
+}
+For a B-ESEM source the same two schemes apply to G and to every
+specific factor; all factor covariances stay fixed at zero in both.}
 }
 \value{
 A character string of lavaan model syntax.  Use \code{cat()} to
-  inspect, or pass directly to \code{\link{fit_ewc}} via
-  \code{custom_syntax}.
+inspect, or pass directly to \code{\link{fit_ewc}} via
+\code{custom_syntax}.
 }
 \description{
 Converts a fitted ESEM solution into explicit lavaan CFA syntax following

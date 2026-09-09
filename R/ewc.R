@@ -17,6 +17,11 @@
 #                                  referent's own primary loading stays free
 #   var_fixed = FALSE           : factor variances freely estimated;
 #                                  referent's own primary loading is FIXED
+# Both modes apply to the B-ESEM-within-CFA path too (G and every specific
+# factor). Identification comes entirely from the generated syntax: lavaan's
+# auto.fix.first stays OFF, because with it on lavaan also pins the first
+# indicator of any factor whose referent is not that first item (at its
+# start() value), and the EWC stops being a re-expression of the ESEM.
 #
 # These functions are self-contained and do not modify any pipeline file.
 # They use public lavaan functions and .rmsea_ci() from pipeline.R (same namespace).
@@ -103,6 +108,8 @@ find_ewc_referents <- function(esem_fit, spec) {
 #'       Referent's own primary loading is \emph{also} fixed for identification.
 #'       Mirrors Mplus \code{EX*; MD*; CI*;}.}
 #'   }
+#'   For a B-ESEM source the same two schemes apply to G and to every
+#'   specific factor; all factor covariances stay fixed at zero in both.
 #'
 #' @return A character string of lavaan model syntax.  Use \code{cat()} to
 #'   inspect, or pass directly to \code{\link{fit_ewc}} via
@@ -124,9 +131,10 @@ ewc_syntax <- function(esem_fit, spec,
     stop("`spec` must be an esem_spec from specify_model().", call. = FALSE)
 
   # B-ESEM path: route to the bifactor EWC generator (different convention --
-  # G referent + orthogonality constraints). var_fixed is ignored.
+  # G referent + orthogonality constraints).
   if (inherits(esem_fit, "besem_fit"))
-    return(.besem_ewc_syntax(esem_fit, spec, referents = referents))
+    return(.besem_ewc_syntax(esem_fit, spec, referents = referents,
+                             var_fixed = var_fixed))
 
   if (is.null(referents))
     referents <- find_ewc_referents(esem_fit, spec)
@@ -233,7 +241,7 @@ ewc_syntax <- function(esem_fit, spec,
 #' @param custom_syntax Character or \code{NULL}.  Supply a hand-edited
 #'   syntax string (from \code{\link{ewc_syntax}}) instead of auto-generating.
 #'   When non-\code{NULL}, \code{referents} and \code{var_fixed} still control
-#'   the \code{lavaan::cfa()} options (std.lv, auto.fix.first).
+#'   the \code{lavaan::cfa()} options (\code{std.lv}).
 #' @param ... Additional arguments forwarded to \code{lavaan::cfa()}.
 #'
 #' @return An object of class \code{"ewc_fit"}:
@@ -273,17 +281,20 @@ fit_ewc <- function(esem_fit,
 
   syntax <- if (!is.null(custom_syntax)) {
     custom_syntax
-  } else if (is_besem) {
-    .besem_ewc_syntax(esem_fit, spec, referents = referents)
   } else {
     ewc_syntax(esem_fit, spec, referents = referents, var_fixed = var_fixed)
   }
 
+  # Identification comes entirely from the generated syntax (referent loadings
+  # pinned; variances fixed to 1 through std.lv when var_fixed). auto.fix.first
+  # must stay off: with it on, lavaan also pins the first indicator of every
+  # factor whose referent is not that first item, at its start() value, and
+  # the EWC gains df it should not have.
   cfa_args <- list(
     model          = syntax,
     data           = spec$data,
-    std.lv         = if (is_besem) TRUE else isTRUE(var_fixed),
-    auto.fix.first = if (is_besem) FALSE else !isTRUE(var_fixed),
+    std.lv         = isTRUE(var_fixed),
+    auto.fix.first = FALSE,
     estimator      = estimator,
     missing        = missing
   )
@@ -295,7 +306,12 @@ fit_ewc <- function(esem_fit,
 
   if (is_ordered) {
     cfa_args$ordered          <- spec$all_items
-    cfa_args$parameterization <- "delta"
+    # Pinned values must live on the scale the EWC is fitted on. A custom-DWLS
+    # B-ESEM stores rotated loadings on the standardised (delta) scale; a
+    # lavaan-path ESEM stores estimates on its own parameterization (theta by
+    # default in esem_ordered()), so follow the source.
+    cfa_args$parameterization <- if (is_besem) "delta" else
+      .ewc_source_parameterization(esem_fit)
   }
 
   dots <- list(...)
@@ -308,28 +324,22 @@ fit_ewc <- function(esem_fit,
            call. = FALSE)
   )
 
-  # When the source is a custom-DWLS B-ESEM (besem_fit_ordered), inherit its
-  # wlsmv_stats. The B-EWC re-expression has identical Sigma_implied (verified
-  # by max|dSigma| = 0 in validation/_validate_bewc_recovery.R) but lavaan's
-  # WLSMV scaling uses Euclidean df (cross-loading constraints + Phi @ 0 each
-  # count), while the rotation form (n_pairs - n_loadings + k(k-1)/2) is what
-  # Mplus uses. Inheriting the source stats keeps fit indices on the
-  # rotation-form scale -- consistent with B-ESEM and matched to Mplus.
-  source_wlsmv <- if (is_besem && inherits(esem_fit, "besem_fit_ordered"))
-    esem_fit$wlsmv_stats else NULL
-
-  out <- list(
-    lavaan_fit  = lav_fit,
-    syntax      = syntax,
-    referents   = referents,
-    var_fixed   = if (is_besem) TRUE else var_fixed,
-    estimator   = estimator,
-    spec        = spec,
-    besem       = is_besem
+  # The B-EWC is a CFA with k(k-1)/2 more constraints than the orthogonal
+  # B-ESEM (all referent cross-loadings pinned, not just the k(k-1)/2 the
+  # rotation needs), so its df is larger and its fit is its own -- reported
+  # from this lavaan fit, never copied from the source.
+  structure(
+    list(
+      lavaan_fit  = lav_fit,
+      syntax      = syntax,
+      referents   = referents,
+      var_fixed   = isTRUE(var_fixed),
+      estimator   = estimator,
+      spec        = spec,
+      besem       = is_besem
+    ),
+    class = "ewc_fit"
   )
-  if (!is.null(source_wlsmv)) out$wlsmv_stats <- source_wlsmv
-
-  structure(out, class = "ewc_fit")
 }
 
 
@@ -397,15 +407,7 @@ print.ewc_fit <- function(x, ...) {
   obj_name <- deparse(substitute(x))
   if (length(obj_name) != 1L || !nzchar(obj_name) || grepl("[^A-Za-z0-9._]", obj_name))
     obj_name <- "x"
-  is_wlsmv <- grepl("DWLS|WLSMV", x$estimator, ignore.case = TRUE)
-  fm_keys  <- if (is_wlsmv)
-    c("cfi.scaled", "tli.scaled", "rmsea.scaled", "srmr",
-      "chisq.scaled", "df.scaled")
-  else
-    c("cfi", "tli", "rmsea", "srmr", "chisq", "df")
-
-  fm <- tryCatch(lavaan::fitMeasures(x$lavaan_fit, fm_keys),
-                 error = function(e) NULL)
+  fi <- .ewc_fi(x$lavaan_fit, x$estimator)
 
   id_label <- if (x$var_fixed) "factor variances fixed to 1"
               else              "factor variances free (referent primary loadings fixed)"
@@ -419,27 +421,10 @@ print.ewc_fit <- function(x, ...) {
   cat(" Referents       :",
       paste(paste0(names(x$referents), "=", x$referents), collapse = ", "), "\n\n")
 
-  ws <- x$wlsmv_stats
-  if (!is.null(ws)) {
+  if (!is.na(fi[["X2"]])) {
     cat(sprintf("  CFI = %.3f   TLI = %.3f   RMSEA = %.3f   SRMR = %.3f\n",
-                ws$cfi, ws$tli, ws$rmsea, ws$srmr))
-    cat(sprintf("  X2(%g) = %.3f\n", ws$df, ws$chisq))
-    cat(" (Fit propagated from source B-ESEM; identical Sigma_implied.\n",
-        "  lavaan's own WLSMV scaling for the EWC re-expression uses\n",
-        "  Euclidean df; call lavaan::fitMeasures(x$lavaan_fit) to inspect.)\n",
-        sep = "")
-  } else if (!is.null(fm)) {
-    if (is_wlsmv) {
-      cat(sprintf("  CFI = %.3f   TLI = %.3f   RMSEA = %.3f   SRMR = %.3f\n",
-                  fm["cfi.scaled"], fm["tli.scaled"],
-                  fm["rmsea.scaled"], fm["srmr"]))
-      cat(sprintf("  X2(%g) = %.3f\n",
-                  fm["df.scaled"], fm["chisq.scaled"]))
-    } else {
-      cat(sprintf("  CFI = %.3f   TLI = %.3f   RMSEA = %.3f   SRMR = %.3f\n",
-                  fm["cfi"], fm["tli"], fm["rmsea"], fm["srmr"]))
-      cat(sprintf("  X2(%g) = %.3f\n", fm["df"], fm["chisq"]))
-    }
+                fi[["CFI"]], fi[["TLI"]], fi[["RMSEA"]], fi[["SRMR"]]))
+    cat(sprintf("  X2(%g) = %.3f\n", fi[["df"]], fi[["X2"]]))
   }
 
   cat("\n Use summary(", obj_name, ") for full output (adds colour-coded loadings table)\n", sep = "")
@@ -555,66 +540,25 @@ print.ewc_comparison <- function(x, ...) {
   ld
 }
 
-# Extract 12 fit values (matching the comparison_table row order).
+# Extract 12 fit values (matching the comparison_table row order) through the
+# shared helper, so the EWC column agrees with the pipeline columns on scaled
+# (MLR / WLSMV) statistics and on the Mplus SRMR denominator.
 .ewc_fi <- function(lav, estimator) {
-  is_wlsmv <- grepl("DWLS|WLSMV", estimator, ignore.case = TRUE)
+  labels <- c("CFI","TLI","RMSEA","RMSEA [L90%CI]","RMSEA [U90%CI]",
+              "SRMR","X2","df","p","AIC","BIC","SABIC")
+  fi <- .fit_indices_lav(lav)
+  if (is.null(fi)) return(setNames(rep(NA_real_, 12L), labels))
 
-  keys <- if (is_wlsmv)
-    c("cfi.scaled", "tli.scaled", "rmsea.scaled",
-      "rmsea.scaled.ci.lower", "rmsea.scaled.ci.upper",
-      "srmr", "chisq.scaled", "df.scaled", "pvalue.scaled")
-  else
-    c("cfi", "tli", "rmsea", "rmsea.ci.lower", "rmsea.ci.upper",
-      "srmr", "chisq", "df", "pvalue", "aic", "bic", "bic2")
-
-  fm <- tryCatch(lavaan::fitMeasures(lav, keys), error = function(e) NULL)
-
-  na12 <- setNames(rep(NA_real_, 12L),
-                   c("CFI","TLI","RMSEA","RMSEA [L90%CI]","RMSEA [U90%CI]",
-                     "SRMR","X2","df","p","AIC","BIC","SABIC"))
-  if (is.null(fm)) return(na12)
-
-  if (is_wlsmv) {
-    lo <- as.numeric(fm["rmsea.scaled.ci.lower"])
-    hi <- as.numeric(fm["rmsea.scaled.ci.upper"])
-    if (is.na(lo) || is.na(hi)) {
-      n  <- tryCatch(sum(lavaan::lavInspect(lav, "nobs")),
-                     error = function(e) NA_integer_)
-      ci <- .rmsea_ci(as.numeric(fm["chisq.scaled"]),
-                      as.numeric(fm["df.scaled"]), n)
-      lo <- ci[1L]; hi <- ci[2L]
-    }
-    setNames(round(c(
-      as.numeric(fm["cfi.scaled"]),   as.numeric(fm["tli.scaled"]),
-      as.numeric(fm["rmsea.scaled"]), lo, hi,
-      as.numeric(fm["srmr"]),
-      as.numeric(fm["chisq.scaled"]), as.numeric(fm["df.scaled"]),
-      as.numeric(fm["pvalue.scaled"]),
-      NA_real_, NA_real_, NA_real_
-    ), 3L),
-    c("CFI","TLI","RMSEA","RMSEA [L90%CI]","RMSEA [U90%CI]",
-      "SRMR","X2","df","p","AIC","BIC","SABIC"))
-  } else {
-    lo <- as.numeric(fm["rmsea.ci.lower"])
-    hi <- as.numeric(fm["rmsea.ci.upper"])
-    if (is.na(lo) || is.na(hi)) {
-      n  <- tryCatch(sum(lavaan::lavInspect(lav, "nobs")),
-                     error = function(e) NA_integer_)
-      ci <- .rmsea_ci(as.numeric(fm["chisq"]), as.numeric(fm["df"]), n)
-      lo <- ci[1L]; hi <- ci[2L]
-    }
-    setNames(round(c(
-      as.numeric(fm["cfi"]),  as.numeric(fm["tli"]),
-      as.numeric(fm["rmsea"]), lo, hi,
-      as.numeric(fm["srmr"]),
-      as.numeric(fm["chisq"]), as.numeric(fm["df"]),
-      as.numeric(fm["pvalue"]),
-      as.numeric(fm["aic"]),  as.numeric(fm["bic"]),
-      as.numeric(fm["bic2"])
-    ), 3L),
-    c("CFI","TLI","RMSEA","RMSEA [L90%CI]","RMSEA [U90%CI]",
-      "SRMR","X2","df","p","AIC","BIC","SABIC"))
+  lo <- fi[["rmsea.ci.lower"]]; hi <- fi[["rmsea.ci.upper"]]
+  if (is.na(lo) || is.na(hi)) {
+    n  <- tryCatch(sum(lavaan::lavInspect(lav, "nobs")),
+                   error = function(e) NA_integer_)
+    ci <- .rmsea_ci(fi[["chisq"]], fi[["df"]], n)
+    lo <- ci[1L]; hi <- ci[2L]
   }
+  setNames(round(c(fi[["cfi"]], fi[["tli"]], fi[["rmsea"]], lo, hi, fi[["srmr"]],
+                   fi[["chisq"]], fi[["df"]], fi[["pvalue"]],
+                   fi[["aic"]], fi[["bic"]], fi[["bic2"]]), 3L), labels)
 }
 
 
@@ -623,11 +567,12 @@ print.ewc_comparison <- function(x, ...) {
 #   - One referent per specific factor (item with highest |specific loading|)
 #   - One additional referent for G (highest |G loading| among items not already
 #     used as a specific-factor referent)
-#   - Every referent has its own-factor loading FREE (*value) and ALL other
-#     factor loadings FIXED (@value) -- including the G loading for specific
-#     referents and the specific loadings for the G referent.
+#   - Every referent has ALL its other-factor loadings FIXED (@value) --
+#     including the G loading for specific referents and the specific
+#     loadings for the G referent.
+#   - var_fixed = TRUE : referent's own-factor loading FREE, variances @1.
+#     var_fixed = FALSE: referent's own-factor loading FIXED, variances free.
 #   - All factor covariances fixed to 0 (orthogonal bifactor structure).
-#   - Factor variances fixed to 1.
 
 .besem_ewc_referents <- function(besem_fit, spec) {
   L <- besem_fit$rotated_loadings
@@ -676,7 +621,15 @@ print.ewc_comparison <- function(x, ...) {
   out
 }
 
-.besem_ewc_syntax <- function(besem_fit, spec, referents = NULL) {
+# Parameterization the source lavaan fit was estimated under ("theta" /
+# "delta"); "delta" when the slot is absent (custom-DWLS fits, continuous).
+.ewc_source_parameterization <- function(esem_fit) {
+  p <- tryCatch(lavaan::lavInspect(esem_fit$lavaan_fit, "options")$parameterization,
+                error = function(e) NULL)
+  if (is.character(p) && length(p) == 1L && p %in% c("theta", "delta")) p else "delta"
+}
+
+.besem_ewc_syntax <- function(besem_fit, spec, referents = NULL, var_fixed = TRUE) {
   L <- besem_fit$rotated_loadings
   if (is.null(L))
     stop("besem_fit$rotated_loadings is missing -- cannot build B-EWC syntax.",
@@ -722,15 +675,17 @@ print.ewc_comparison <- function(x, ...) {
 
       # Rule:
       #   * non-referent item                              -> FREE  start(v)*item
-      #   * referent item, own factor                      -> FREE  start(v)*item
+      #   * referent item, own factor                      -> FREE  (var_fixed)
+      #                                                       FIXED (!var_fixed)
       #   * referent item, another factor (cross-loading)  -> FIXED val*item
+      is_fixed <- is_refent && (!is_owner || !var_fixed)
       if (!is.na(val)) {
-        if (is_refent && !is_owner)
+        if (is_fixed)
           sprintf("%.5f*%s", val, it)
         else
           sprintf("start(%.5f)*%s", val, it)
       } else {
-        if (is_refent && !is_owner) it else sprintf("start(0)*%s", it)
+        if (is_fixed) it else sprintf("start(0)*%s", it)
       }
     }, character(1L))
 
@@ -754,7 +709,11 @@ print.ewc_comparison <- function(x, ...) {
     "\n",
     "#   start(v)*item   = FREE, rotated loading as starting value\n",
     "#   value*item      = FIXED to rotated loading\n",
-    "# Factor variances = 1 (std.lv=TRUE); all factor covariances fixed to 0.\n"
+    "# var_fixed = ", var_fixed, "\n",
+    if (var_fixed)
+      "# Factor variances = 1 (std.lv=TRUE); all factor covariances fixed to 0.\n"
+    else
+      "# Factor variances free (referent own-factor loadings fixed above); all factor covariances fixed to 0.\n"
   )
 
   paste(c(header, "", load_lines, "", ortho_lines), collapse = "\n")

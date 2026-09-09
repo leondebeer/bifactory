@@ -36,7 +36,7 @@ syntax string invisibly if \code{NULL}.}
 }
 \value{
 The Mplus syntax as a character string (invisibly). Writes file
-  if \code{output_path} is supplied.
+if \code{output_path} is supplied.
 }
 \description{
 Generates a complete Mplus .inp file for ESEM with target rotation,

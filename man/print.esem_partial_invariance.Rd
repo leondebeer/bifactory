@@ -13,7 +13,7 @@
 }
 \value{
 Invisibly returns \code{x}; called for the side effect of printing
-  the partial-invariance summary.
+the partial-invariance summary.
 }
 \description{
 Print Method for esem_partial_invariance

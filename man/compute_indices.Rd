@@ -12,9 +12,9 @@ compute_indices(results)
 }
 \value{
 An object of class \code{"reliability_indices"} -- a named list with
-  elements \code{cfa}, \code{esem}, \code{besem}, each containing the
-  computed indices for that model, plus \code{alpha} (Cronbach's alpha per
-  subscale and for G). Pass to \code{print()} for a formatted table.
+elements \code{cfa}, \code{esem}, \code{besem}, each containing the
+computed indices for that model, plus \code{alpha} (Cronbach's alpha per
+subscale and for G). Pass to \code{print()} for a formatted table.
 }
 \description{
 Computes McDonald's omega reliability indices for all three models in a
@@ -22,30 +22,39 @@ pipeline result, following the bifactor reporting framework recommended by
 Morin, Arens & Marsh (2016) and Rodriguez, Reise & Haviland (2016).
 }
 \details{
-For the **total composite** (all items):
+For the \strong{total composite} (all items):
 \itemize{
-  \item \code{omega_total} -- total reliability (rotation-invariant for
-    orthogonal models).
-  \item \code{omega_H} -- hierarchical omega: G factor's contribution to
-    total-score reliability (B-ESEM only).
-  \item \code{ECV} -- explained common variance: G's share of all common
-    variance (B-ESEM only).
-  \item \code{H(G)} -- construct replicability of G (B-ESEM only).
+\item \code{omega_total} -- total reliability (rotation-invariant for
+orthogonal models).
+\item \code{omega_H} -- hierarchical omega: G factor's contribution to
+total-score reliability (B-ESEM only).
+\item \code{ECV} -- explained common variance: G's share of all common
+variance (B-ESEM only).
+\item \code{H(G)} -- construct replicability of G (B-ESEM only).
 }
 
-For each **subscale** (items of specific factor \eqn{F_s}):
+For each \strong{subscale} (items of specific factor \eqn{F_s}):
 \itemize{
-  \item \code{omega_S} -- specific factor's unique contribution to subscale
-    reliability: \eqn{(\sum_{i \in s} \lambda_{s,i})^2 /
-    [(\sum_{i \in s} \lambda_{s,i})^2 + \sum_{i \in s} \psi_i]}.
-    Uses target loadings and item residuals only; G does not enter the
-    denominator because \eqn{\psi_i} already has G partialled out.
-  \item \code{omega_sub} -- total reliability of the subscale sum score
-    (G + specific factor combined).
-  \item \code{omega_H_sub} -- G's contribution to subscale reliability.
-  \item \code{ECV_s} -- G's share of common variance within the subscale.
-  \item \code{H(Fs)} -- construct replicability of the specific factor.
+\item \code{omega_S} -- specific factor's contribution to subscale
+reliability: \eqn{(\sum_{i \in s} |\lambda_{s,i}|)^2 /
+    [(\sum_{i \in s} |\lambda_{G,i}|)^2 + (\sum_{i \in s} |\lambda_{s,i}|)^2
+    + \sum_{i \in s} \psi_i]}. G is not partialled out; its variance is
+treated as an additional source of error (Morin, 2023; Morin et al.,
+2020). \code{omega_H(G|s)} is the mirror image with the specific
+factor treated as error.
+\item \code{omega_sub} -- total reliability of the subscale sum score
+(G + specific factor combined).
+\item \code{omega_H_sub} -- G's contribution to subscale reliability.
+\item \code{ECV_s} -- G's share of common variance within the subscale.
+\item \code{H(Fs)} -- construct replicability of the specific factor.
 }
+
+Every composite sum uses absolute standardized loadings, the convention of
+Morin, Arens and Marsh (2016): each item is scored in the direction of its
+loading, so reverse-worded items and the orientation of a factor do not
+change any index. Residual variances are taken from the model-implied
+item variances (for correlated factors, one minus the diagonal of
+\eqn{\Lambda \Phi \Lambda'}).
 }
 \examples{
 data("HolzingerSwineford1939", package = "lavaan")
@@ -76,4 +85,13 @@ Morin, A. J. S., Arens, A. K., & Marsh, H. W. (2016). A bifactor
 exploratory structural equation modeling framework for the identification of
 distinct sources of construct-relevant psychometric multidimensionality.
 \emph{Structural Equation Modeling}, \emph{23}(1), 116-139.
+
+Morin, A. J. S., Myers, N. D., & Lee, S. (2020). Modern factor analytic
+techniques: Bifactor models, exploratory structural equation modeling (ESEM)
+and bifactor-ESEM. In G. Tenenbaum & R. C. Eklund (Eds.), \emph{Handbook of
+Sport Psychology} (4th ed., pp. 1044-1073). Wiley.
+
+Morin, A. J. S. (2023). Exploratory structural equation modeling. In
+R. H. Hoyle (Ed.), \emph{Handbook of Structural Equation Modeling} (2nd ed.,
+pp. 503-524). Guilford.
 }

@@ -35,11 +35,13 @@ Default \code{TRUE}.}
 }
 \value{
 A data frame (invisibly) with \code{_R}, \code{_Mplus}, and
-  \code{delta_} columns for each fit statistic. Printed as a table.
+\code{delta_} columns for each fit statistic. Printed as a table.
 }
 \description{
-Creates complete Mplus \code{.inp} files for configural, weak, strong, and
-strict invariance, runs them via \pkg{MplusAutomation}, then prints a
+Creates complete Mplus \code{.inp} files for every level fitted in
+\code{inv} (configural, weak, strong, strict and, when
+\code{esem_invariance()} was run with \code{through}, latent var/cov and
+latent means), runs them via \pkg{MplusAutomation}, then prints a
 side-by-side comparison of fit statistics against the R results from
 \code{\link{esem_invariance}}.
 }

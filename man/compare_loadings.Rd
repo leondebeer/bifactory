@@ -13,13 +13,13 @@ compare_loadings(results)
 \value{
 A data frame with columns:
 \describe{
-  \item{\code{model}}{CFA, ESEM, or BESEM.}
-  \item{\code{factor}}{Factor name (lowercase).}
-  \item{\code{item}}{Item name (lowercase).}
-  \item{\code{loading_type}}{\code{"primary"} or \code{"cross"}.}
-  \item{\code{R_std}, \code{R_se}, \code{R_z}, \code{R_p}}{R estimates.}
-  \item{\code{Mplus_std}, \code{Mplus_se}, \code{Mplus_z}, \code{Mplus_p}}{Mplus estimates (\code{NA} if unavailable).}
-  \item{\code{diff_std}}{R \eqn{-} Mplus standardised loading difference (\code{NA} if unavailable).}
+\item{\code{model}}{CFA, ESEM, or BESEM.}
+\item{\code{factor}}{Factor name (lowercase).}
+\item{\code{item}}{Item name (lowercase).}
+\item{\code{loading_type}}{\code{"primary"} or \code{"cross"}.}
+\item{\code{R_std}, \code{R_se}, \code{R_z}, \code{R_p}}{R estimates.}
+\item{\code{Mplus_std}, \code{Mplus_se}, \code{Mplus_z}, \code{Mplus_p}}{Mplus estimates (\code{NA} if unavailable).}
+\item{\code{diff_std}}{R \eqn{-} Mplus standardised loading difference (\code{NA} if unavailable).}
 }
 }
 \description{

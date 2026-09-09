@@ -13,7 +13,7 @@
 }
 \value{
 Invisibly returns \code{x}; called for the side effect of printing
-  the alignment-ratio summary.
+the alignment-ratio summary.
 }
 \description{
 Print Method for alignment_check

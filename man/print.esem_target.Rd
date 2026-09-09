@@ -13,7 +13,7 @@
 }
 \value{
 Invisibly returns \code{x}; called for the side effect of printing
-  the target loading matrix.
+the target loading matrix.
 }
 \description{
 Displays a \code{make_target()} result in a compact, readable format,

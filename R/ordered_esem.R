@@ -1,6 +1,6 @@
-#' ESEM for Ordered-Categorical (Likert) Data
+#' ESEM for Ordinal (Likert) Data
 #'
-#' Fits ESEM on ordered-categorical indicators (WLSMV / Theta parameterization).
+#' Fits ESEM on ordinal indicators (WLSMV / Theta parameterization).
 #' Called automatically from \code{\link{esem}} when \code{ordered} is set.
 #'
 #' **Default** (\code{method = "lavaan"}): lavaan's \code{efa()} block with WLSMV
@@ -498,7 +498,7 @@ esem_ordered <- function(data,
     TLI   <- if (df_null == 0 || T_null_wlsmv == 0) NA_real_ else
       (T_null_wlsmv / df_null - T_wlsmv / df_wlsmv) / (T_null_wlsmv / df_null - 1)
     RMSEA <- sqrt(max((T_wlsmv - df_wlsmv) / (df_wlsmv * (n - 1L)), 0))
-    SRMR  <- sqrt(sum(resid_v * resid_v) / n_wls)
+    SRMR  <- sqrt(sum(resid_v * resid_v) / (n_wls + n_i))
 
     message("  chi2(", df_wlsmv, ") = ", round(T_wlsmv, 3),
             "  p = ", round(pval, 4),
@@ -741,9 +741,9 @@ esem_ordered <- function(data,
   J
 }
 
-#' Bifactor ESEM for Ordered-Categorical Data
+#' Bifactor ESEM for Ordinal Data
 #'
-#' Fits B-ESEM on ordered-categorical indicators. Called from \code{\link{besem}}
+#' Fits B-ESEM on ordinal indicators. Called from \code{\link{besem}}
 #' when \code{ordered} is set. For Mplus-aligned loadings and fit indices use
 #' \code{method = "rotation"} (default; also used by \code{\link{run_comparison}}).
 #'
@@ -974,7 +974,7 @@ besem_ordered <- function(data,
     Gamma_full   <- as.matrix(Gamma_raw)
 
     obs_names    <- names(wls_obs_full)
-    n_wls        <- length(wls_obs_full)   # n_pairs + n_thresholds (Mplus SRMR denominator)
+    n_wls        <- length(wls_obs_full)   # n_pairs + n_thresholds
     cor_idx      <- grep("~~", obs_names)
 
     if (length(cor_idx) == 0)
@@ -1320,11 +1320,11 @@ besem_ordered <- function(data,
     TLI  <- if (df_null == 0 || T_null_wlsmv == 0) NA_real_ else
       (T_null_wlsmv / df_null - T_wlsmv / df_wlsmv) / (T_null_wlsmv / df_null - 1)
     RMSEA <- sqrt(max((T_wlsmv - df_wlsmv) / (df_wlsmv * (n - 1L)), 0))
-    # Mplus SRMR denominator: total WLS observed statistics = n_pairs + n_thresholds.
-    # Mplus includes the full wls.obs vector in the denominator; threshold residuals
-    # are identically 0 (thresholds are free params) so only the denominator changes.
-    # This matches Mplus SRMR convention; remaining gap vs Mplus is from rotation.
-    SRMR  <- sqrt(sum(resid_rot * resid_rot) / n_wls)
+    # Mplus SRMR (Asparouhov & Muthen 2018): correlation residuals plus category-
+    # probability residuals over n_pairs + total categories = n_wls + n_i.  The
+    # thresholds are free here, so their probability residuals are 0 and only
+    # the denominator differs from the plain correlation-space RMS residual.
+    SRMR  <- sqrt(sum(resid_rot * resid_rot) / (n_wls + n_i))
 
     message("  chi2(", df_wlsmv, ") = ", round(T_wlsmv, 3),
             "  p = ", round(pval, 4),

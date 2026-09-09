@@ -14,7 +14,7 @@ compare_ewc(results, ewc)
 }
 \value{
 An object of class \code{c("ewc_comparison","data.frame")}.
-  Print with \code{print()} for a formatted table.
+Print with \code{print()} for a formatted table.
 }
 \description{
 Appends fit indices from a \code{\link{fit_ewc}} result to the pipeline

@@ -17,7 +17,7 @@
 }
 \value{
 A \code{data.frame} of modification indices, as returned by
-  \code{lavaan::modindices()}.
+\code{lavaan::modindices()}.
 }
 \description{
 Forwards to \code{lavaan::modindices()} on \code{lavaan_fit(x)}. For custom

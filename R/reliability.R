@@ -37,17 +37,26 @@
 #'
 #' For each **subscale** (items of specific factor \eqn{F_s}):
 #' \itemize{
-#'   \item \code{omega_S} -- specific factor's unique contribution to subscale
-#'     reliability: \eqn{(\sum_{i \in s} \lambda_{s,i})^2 /
-#'     [(\sum_{i \in s} \lambda_{s,i})^2 + \sum_{i \in s} \psi_i]}.
-#'     Uses target loadings and item residuals only; G does not enter the
-#'     denominator because \eqn{\psi_i} already has G partialled out.
+#'   \item \code{omega_S} -- specific factor's contribution to subscale
+#'     reliability: \eqn{(\sum_{i \in s} |\lambda_{s,i}|)^2 /
+#'     [(\sum_{i \in s} |\lambda_{G,i}|)^2 + (\sum_{i \in s} |\lambda_{s,i}|)^2
+#'     + \sum_{i \in s} \psi_i]}. G is not partialled out; its variance is
+#'     treated as an additional source of error (Morin, 2023; Morin et al.,
+#'     2020). \code{omega_H(G|s)} is the mirror image with the specific
+#'     factor treated as error.
 #'   \item \code{omega_sub} -- total reliability of the subscale sum score
 #'     (G + specific factor combined).
 #'   \item \code{omega_H_sub} -- G's contribution to subscale reliability.
 #'   \item \code{ECV_s} -- G's share of common variance within the subscale.
 #'   \item \code{H(Fs)} -- construct replicability of the specific factor.
 #' }
+#'
+#' Every composite sum uses absolute standardized loadings, the convention of
+#' Morin, Arens and Marsh (2016): each item is scored in the direction of its
+#' loading, so reverse-worded items and the orientation of a factor do not
+#' change any index. Residual variances are taken from the model-implied
+#' item variances (for correlated factors, one minus the diagonal of
+#' \eqn{\Lambda \Phi \Lambda'}).
 #'
 #' @param results An \code{esem_comparison_pipeline} object from
 #'   \code{\link{run_comparison}}.
@@ -68,6 +77,15 @@
 #' exploratory structural equation modeling framework for the identification of
 #' distinct sources of construct-relevant psychometric multidimensionality.
 #' \emph{Structural Equation Modeling}, \emph{23}(1), 116-139.
+#'
+#' Morin, A. J. S., Myers, N. D., & Lee, S. (2020). Modern factor analytic
+#' techniques: Bifactor models, exploratory structural equation modeling (ESEM)
+#' and bifactor-ESEM. In G. Tenenbaum & R. C. Eklund (Eds.), \emph{Handbook of
+#' Sport Psychology} (4th ed., pp. 1044-1073). Wiley.
+#'
+#' Morin, A. J. S. (2023). Exploratory structural equation modeling. In
+#' R. H. Hoyle (Ed.), \emph{Handbook of Structural Equation Modeling} (2nd ed.,
+#' pp. 503-524). Guilford.
 #'
 #' @examples
 #' data("HolzingerSwineford1939", package = "lavaan")
@@ -135,19 +153,28 @@ compute_indices <- function(results) {
                       dimnames = list(items, factors))
     for (i in seq_len(nrow(lam)))
       Lambda[lam$rhs[i], lam$lhs[i]] <- lam$est.std[i]
-    psi <- 1 - rowSums(Lambda^2)
     Phi <- tryCatch({
       m <- lavaan::lavInspect(lav_obj, "cor.lv")
-      if (is.matrix(m) && nrow(m) == length(factors)) m else diag(length(factors))
+      if (is.matrix(m) && nrow(m) == length(factors)) m[factors, factors] else diag(length(factors))
     }, error = function(e) diag(length(factors)))
+    # residual variance in the correlation metric: 1 - communality, where the
+    # communality includes the factor correlations (cross-loadings on
+    # correlated factors share variance; 1 - rowSums(Lambda^2) misses it)
+    psi <- 1 - diag(Lambda %*% Phi %*% t(Lambda))
     list(Lambda = Lambda, psi = psi, Phi = Phi)
   }
 
-  # Omega for correlated-factor models (CFA / ESEM)
+  # Omega for correlated-factor models (CFA / ESEM).  Composite sums use
+  # absolute loadings (Morin, Arens & Marsh 2016): each item is scored in the
+  # direction of its loading, so reversing an item or reflecting a factor
+  # cannot change the index.  Phi is reflected with the factors first, so
+  # that a negatively oriented factor keeps its correlations consistent.
   .omega_lavaan <- function(fit_obj, model_label) {
     e      <- .extract_lambda_psi_phi(fit_obj)
-    Lambda <- e$Lambda; psi <- e$psi; Phi <- e$Phi
-    c_vec  <- colSums(Lambda)
+    Lambda <- e$Lambda; psi <- e$psi
+    D      <- sign(colSums(Lambda)); D[D == 0] <- 1
+    Phi    <- e$Phi * tcrossprod(D)
+    c_vec  <- colSums(abs(Lambda))
     numer  <- as.numeric(t(c_vec) %*% Phi %*% c_vec)
     H      <- sapply(colnames(Lambda), function(f) {
       r <- sum(Lambda[, f]^2 / psi); r / (1 + r)
@@ -185,7 +212,7 @@ compute_indices <- function(results) {
     gname <- fit_b$g_name %||% colnames(L)[1]
     specs <- setdiff(colnames(L), gname)
     psi   <- pmax(1 - rowSums(L^2), 1e-6)
-    c_vec <- colSums(L)
+    c_vec <- colSums(abs(L))          # absolute loadings, as in the subscales below
     total_var <- sum(c_vec^2) + sum(psi)
     H_vals <- sapply(colnames(L), function(f) { r <- sum(L[,f]^2/psi); r/(1+r) })
 
@@ -211,7 +238,7 @@ compute_indices <- function(results) {
 
     list(model       = "BESEM",
          omega_total = round(sum(c_vec^2) / total_var, 3),
-         omega_h_g   = round(c_vec[gname]^2 / total_var, 3),
+         omega_h_g   = round(c_vec[[gname]]^2 / total_var, 3),
          ecv         = if (sum(L^2) < 1e-14) NA_real_
                        else round(sum(L[, gname]^2) / sum(L^2), 3),
          puc         = puc,
@@ -238,7 +265,7 @@ compute_indices <- function(results) {
     specs <- setdiff(colnames(L), gname)
     psi   <- 1 - rowSums(L^2)
     psi   <- pmax(psi, 1e-6)   # guard against rounding below zero
-    c_vec <- colSums(L)
+    c_vec <- colSums(abs(L))
     total_var <- sum(c_vec^2) + sum(psi)
     H_vals <- sapply(colnames(L), function(f) { r <- sum(L[,f]^2/psi); r/(1+r) })
 
@@ -260,7 +287,7 @@ compute_indices <- function(results) {
 
     list(model       = "BESEM_Mplus",
          omega_total = round(sum(c_vec^2) / total_var, 3),
-         omega_h_g   = round(c_vec[gname]^2 / total_var, 3),
+         omega_h_g   = round(c_vec[[gname]]^2 / total_var, 3),
          ecv         = if (sum(L^2) < 1e-14) NA_real_
                        else round(sum(L[, gname]^2) / sum(L^2), 3),
          puc         = puc,
@@ -278,7 +305,7 @@ compute_indices <- function(results) {
     col_order <- intersect(c(gname, specs), colnames(L))
     L <- L[, col_order, drop = FALSE]
     psi <- pmax(psi, 1e-6)
-    c_vec     <- colSums(L)
+    c_vec     <- colSums(abs(L))
     total_var <- sum(c_vec^2) + sum(psi)
     H_vals    <- sapply(colnames(L), function(f) { r <- sum(L[,f]^2/psi); r/(1+r) })
     sub_list <- lapply(specs, function(s) {
@@ -298,7 +325,7 @@ compute_indices <- function(results) {
     names(sub_list) <- specs
     list(model       = "BESEM",
          omega_total = round(sum(c_vec^2) / total_var, 3),
-         omega_h_g   = round(c_vec[gname]^2 / total_var, 3),
+         omega_h_g   = round(c_vec[[gname]]^2 / total_var, 3),
          ecv         = if (sum(L^2) < 1e-14) NA_real_
                        else round(sum(L[, gname]^2) / sum(L^2), 3),
          puc         = puc,
@@ -346,7 +373,7 @@ compute_indices <- function(results) {
 #'   the reliability table.
 #' @export
 print.reliability_indices <- function(x, ...) {
-  W   <- 100
+  W   <- max(80L, min(100L, getOption("width", 100L)))  # follow the console, 80..100
   r_b <- x$besem
 
   .wrap <- function(..., indent = 2, exdent = 4) {
@@ -514,8 +541,8 @@ print.reliability_indices <- function(x, ...) {
     }
     cat("\n")
     .wrap("w-sub   = McDonald's omega for the total subscale sum score combining G and the specific factor: (cGs^2 + cs^2) / (cGs^2 + cs^2 + S(psi)). Identity: w-spec + w-H = w-sub. [McDonald, 1970; also see Morin et al., 2016]", exdent = 16)
-    .wrap("w-spec  = McDonald's omega for the specific factor's unique contribution to subscale reliability (G partialled out): cs^2 / (cGs^2 + cs^2 + S(psi)). [Rodriguez et al., 2016]", exdent = 16)
-    .wrap("w-H(G|s) = G's proportion of subscale score variance (hierarchical omega at the subscale level): cGs^2 / (cGs^2 + cs^2 + S(psi)). [Rodriguez et al., 2016]", exdent = 16)
+    .wrap("w-spec  = McDonald's omega for the specific factor's unique contribution to subscale reliability (G's variance is not removed; it is treated as an additional source of error): cs^2 / (cGs^2 + cs^2 + S(psi)). [Rodriguez et al., 2016; Morin et al., 2020]", exdent = 16)
+    .wrap("w-H(G|s) = G's proportion of subscale score variance (hierarchical omega at the subscale level; the specific factor is treated as an additional source of error): cGs^2 / (cGs^2 + cs^2 + S(psi)). [Rodriguez et al., 2016]", exdent = 16)
     .wrap("ECV-s       = G's share of common variance within the subscale: S(lam^2)_G / (S(lam^2)_G + S(lam^2)_s) for subscale items.", exdent = 16)
     .wrap("H(Fs)       = construct replicability of the specific factor: how well the subscale items jointly define their specific factor across samples. Values >= 0.80 indicate a well-defined factor. [Rodriguez et al., 2016]", exdent = 16)
     .wrap("Note: cs = S|lam_s| -- absolute loadings used to handle reverse-keyed items.", exdent = 7)

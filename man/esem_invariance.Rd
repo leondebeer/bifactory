@@ -9,6 +9,8 @@ esem_invariance(
   model = c("esem", "besem"),
   missing = NULL,
   verbose = TRUE,
+  through = c("strict", "varcov", "means"),
+  cores = 2L,
   ...
 )
 }
@@ -26,7 +28,27 @@ Theta identification, threshold labels); see \strong{Scope} below.}
 Default \code{NULL} uses \code{spec$missing} from \code{\link{specify_model}}
 (\code{"pairwise"} for ordered data, \code{"listwise"} for continuous).}
 
-\item{verbose}{Logical. Print progress messages. Default \code{TRUE}.}
+\item{verbose}{Logical. Print progress messages. Default \code{TRUE}. The
+\verb{Fitting <level> ...} line is shown in bold blue where the console
+supports ANSI colour (RStudio, or a terminal whose \code{TERM} is not
+"dumb"); \code{options(bifactory.ansi_colour = FALSE)} turns the colour
+off, \code{TRUE} forces it.}
+
+\item{through}{Character. Last level of the sequence to fit.
+\code{"strict"} (default) stops at the four measurement-invariance levels.
+\code{"varcov"} adds latent variance/covariance invariance (level 5:
+factor variances fixed to 1 in every group and factor covariances equal
+across groups, i.e. 0 in every group for B-ESEM). \code{"means"} adds
+latent mean invariance (level 6: factor means fixed to 0 in every group).
+Levels are cumulative, so \code{"means"} fits all six models.}
+
+\item{cores}{Integer. Worker processes for the two starting-value fits of
+each level (lavaan's default start and \code{start = "simple"}), which are
+independent and run at the same time when \code{cores >= 2} (default 2, the
+most that helps). The results are identical; a level then takes as long as
+its slower start instead of both together (\code{psych::bfi}, three groups,
+six levels: 13 instead of 18 minutes). \code{1} fits sequentially. The
+workers load this package and the calling session's library path.}
 
 \item{...}{Additional arguments passed to the underlying fit function. Do not
 pass \code{group}, \code{group_equal}, \code{ordered}, or
@@ -35,52 +57,67 @@ pass \code{group}, \code{group_equal}, \code{ordered}, or
 \value{
 An object of class \code{"esem_invariance"} containing:
 \describe{
-  \item{\code{table}}{Data frame with fit indices and D-statistics.
-    \code{print()} renders it formatted.}
-  \item{\code{models}}{Named list of fit objects:
-    \code{configural}, \code{weak}, \code{strong}, \code{strict}.
-    \code{NULL} entries indicate a model that failed to fit.}
-  \item{\code{lrt}}{Named list of \code{lavTestLRT()} outputs:
-    \code{weak}, \code{strong}, \code{strict}.}
-  \item{\code{spec}}{The original model specification.}
-  \item{\code{model}}{Character: \code{"esem"} or \code{"besem"}.}
-  \item{\code{fallback_from}, \code{fallback_note}}{If B-ESEM configural fails to
-    converge, the result may be from an **ESEM** fallback (no general factor);
-    not comparable df-for-df to Mplus B-ESEM.}
+\item{\code{table}}{Data frame with fit indices and D-statistics.
+\code{print()} renders it formatted.}
+\item{\code{models}}{Named list of fit objects, one per fitted level:
+\code{configural}, \code{weak}, \code{strong}, \code{strict}, and, with
+\code{through}, \code{varcov} and \code{means}.
+\code{NULL} entries indicate a model that failed to fit.}
+\item{\code{lrt}}{Named list of \code{lavTestLRT()} outputs, one per
+fitted level after configural (each compared with the level before it).}
+\item{\code{spec}}{The original model specification.}
+\item{\code{model}}{Character: \code{"esem"} or \code{"besem"}.}
+\item{\code{notes}}{Named list, one character vector per level that raised a
+lavaan warning while being fitted or compared (singular information matrix
+for the robust test statistic, non-positive-definite latent or residual
+covariance matrix, negative variance). The warnings are caught, reworded
+and shown by \code{print()} instead of being raised, so a run that
+concludes does not end with a lavaan warning. Empty when nothing was raised.}
+\item{\code{fallback_from}, \code{fallback_note}}{If B-ESEM configural fails to
+converge, the result may be from an \strong{ESEM} fallback (no general factor);
+not comparable df-for-df to Mplus B-ESEM.}
 }
 }
 \description{
 Tests configural, weak (metric), strong (scalar), and strict invariance for
-an ESEM model across groups. Returns a formatted table of fit indices and
-chi-square difference tests, analogous to Mplus's multi-group output.
+an ESEM model across groups, optionally followed by latent
+variance/covariance and latent mean invariance (\code{through}). Returns a
+formatted table of fit indices and chi-square difference tests, analogous
+to Mplus's multi-group output.
 }
 \section{Scope and caveats}{
 
 \itemize{
-  \item **Ordered B-ESEM:** Validated against Mplus on BFI for
-    \eqn{G \in \{2, 3, 4\}} (max \eqn{|\Delta\mathrm{CFI}| \le 0.001},
-    \eqn{|\Delta\mathrm{SRMR}| \le 0.002}, df match). At \eqn{G \ge 5} with
-    \eqn{\ge 18} items a warning is issued; verify externally before reporting.
-  \item **WLSMV SRMR:** The invariance table applies an Mplus-style SRMR
-    denominator correction for ordered models where implemented.
-  \item **B-ESEM configural failure:** After retries, may fall back to ESEM
-    (\code{fallback_from = "besem"}). The printed table is structurally different
-    from B-ESEM; do not compare to Mplus B-ESEM output.
-  \item **Empty categories:** Ordered multi-group fits may recode categories
-    absent in one group (see verbose output).
+\item \strong{Ordered B-ESEM:} Validated against Mplus on BFI for
+\eqn{G \in \{2, 3, 4\}} (max \eqn{|\Delta\mathrm{CFI}| \le 0.001},
+\eqn{|\Delta\mathrm{SRMR}| \le 0.002}, df match). At \eqn{G \ge 5} with
+\eqn{\ge 18} items a warning is issued; verify externally before reporting.
+\item \strong{WLSMV SRMR:} The invariance table applies an Mplus-style SRMR
+denominator correction for ordered models where implemented.
+\item \strong{B-ESEM configural failure:} After retries, may fall back to ESEM
+(\code{fallback_from = "besem"}). The printed table is structurally different
+from B-ESEM; do not compare to Mplus B-ESEM output.
+\item \strong{Empty categories:} Ordered multi-group fits may recode categories
+absent in one group (see verbose output).
 }
 See \code{system.file("VALIDATION.md", package = "bifactory")} for a summary.
 }
 
 \section{Constraint mapping}{
+\tabular{lll}{
+   Level \tab Continuous (MLR) \tab Ordered (WLSMV/Theta) \cr
+   Configural \tab free \tab free \cr
+   Weak \tab loadings \tab loadings \cr
+   Strong \tab loadings + intercepts \tab loadings + thresholds \cr
+   Strict \tab + residuals \tab + residuals \cr
+   Latent var/cov (\code{through = "varcov"}) \tab + factor variances (1) and covariances \tab + factor variances (1) and covariances \cr
+   Latent means (\code{through = "means"}) \tab + factor means (0) \tab + factor means (0) \cr
+}
 
 
-| Level | Continuous (MLR) | Ordered (WLSMV/Theta) |
-|---|---|---|
-| Configural | free | free |
-| Weak | loadings | loadings |
-| Strong | loadings + intercepts | loadings + thresholds |
-| Strict | + residuals | + residuals |
+The last two levels follow Morin, Arens and Marsh (2016): the degrees of
+freedom grow by \eqn{k(k+1)/2} (variances and covariances of \eqn{k}
+factors) and then by \eqn{k} (means) per non-reference group.
 }
 
 \section{Scaled chi-square difference tests}{
@@ -100,32 +137,57 @@ At the configural level \code{std.lv = TRUE} fixes factor variances to 1
 in all groups. Under weak invariance lavaan automatically frees factor
 variances in Group 2+ and keeps them at 1 in Group 1. Under strong
 invariance factor means are freed in Group 2+ and fixed to 0 in Group 1.
+The optional latent var/cov level fixes the Group 2+ variances back to 1
+and equates the covariances; the latent mean level fixes the Group 2+
+means back to 0.
+
+With ordered indicators (theta parameterization) the configural model
+uses the standard identification in every group: residual variances 1,
+factor means 0, all thresholds free. From the weak level on, the
+non-reference residual variances and factor means are free and identified
+through the equal loadings plus partial threshold equalities (two
+thresholds of one referent item per factor, one threshold of every other
+item), which is the Mplus convention. The same scheme is not used at the
+configural level: with free loadings an item's single equated threshold
+is its only link across groups, and when that threshold lies near zero in
+a non-reference group the item's residual variance is empirically
+unidentified (it ran to several hundred on \code{psych::bfi}, with the
+chi-square drifting by 14 to 36 units between programs). The standard
+identification is the equivalent, well-conditioned model.
+
+Group 1 (the reference group) is the first sorted level of the grouping
+variable, \code{spec$group_levels}, which is also the reference group in
+the Mplus syntax written by \code{\link{run_mplus_besem_invariance}}. The
+fits pass this order to lavaan as \code{group.label}; lavaan's own default
+would be the order in which the groups appear in the data, and a different
+reference group gives an equivalent model with the same fit but differently
+oriented loadings and factor covariances.
 }
 
 \section{Estimator paths}{
 
 \describe{
-  \item{Continuous ESEM / B-ESEM}{
-    \code{\link{esem}} and \code{\link{besem}} use \code{lavaan::cfa()} with a
-    native \code{efa()} block (integrated MLR estimation and rotation).
-  }
-  \item{Ordered ESEM}{
-    \code{esem(ordered = ...)} calls \code{\link{esem_ordered}}. Default
-    \code{method = "lavaan"} (lavaan WLSMV, \code{efa()} block, post-hoc rotation).
-    \code{method = "rotation"} uses a custom DWLS pipeline (polychoric correlations
-    + \pkg{GPArotation}).
-  }
-  \item{Ordered B-ESEM}{
-    \code{besem(ordered = ...)} calls \code{\link{besem_ordered}}. Default
-    \code{method = "rotation"} (custom DWLS/WLSMV + orthogonal \code{targetT}; this
-    is what \code{\link{run_comparison}} uses for ordered data). \code{method = "set-esem"}
-    fits a lavaan WLSMV bifactor **CFA** with non-primary specific loadings fixed at
-    zero; it does **not** match Mplus B-ESEM loadings.
-  }
-  \item{Multi-group invariance}{
-    \code{\link{esem_invariance}} uses lavaan multi-group \code{efa()} models plus
-    explicit syntax patches for ordered B-ESEM. See that help page for scope limits.
-  }
+\item{Continuous ESEM / B-ESEM}{
+\code{\link{esem}} and \code{\link{besem}} use \code{lavaan::cfa()} with a
+native \code{efa()} block (integrated MLR estimation and rotation).
+}
+\item{Ordered ESEM}{
+\code{esem(ordered = ...)} calls \code{\link{esem_ordered}}. Default
+\code{method = "lavaan"} (lavaan WLSMV, \code{efa()} block, post-hoc rotation).
+\code{method = "rotation"} uses a custom DWLS pipeline (polychoric correlations
++ \pkg{GPArotation}).
+}
+\item{Ordered B-ESEM}{
+\code{besem(ordered = ...)} calls \code{\link{besem_ordered}}. Default
+\code{method = "rotation"} (custom DWLS/WLSMV + orthogonal \code{targetT}; this
+is what \code{\link{run_comparison}} uses for ordered data). \code{method = "set-esem"}
+fits a lavaan WLSMV bifactor \strong{CFA} with non-primary specific loadings fixed at
+zero; it does \strong{not} match Mplus B-ESEM loadings.
+}
+\item{Multi-group invariance}{
+\code{\link{esem_invariance}} uses lavaan multi-group \code{efa()} models plus
+explicit syntax patches for ordered B-ESEM. See that help page for scope limits.
+}
 }
 }
 
@@ -172,5 +234,5 @@ print(inv_besem)
 }
 \seealso{
 \code{\link{specify_model}}, \code{\link{esem}},
-  \code{\link{esem_ordered}}
+\code{\link{esem_ordered}}
 }

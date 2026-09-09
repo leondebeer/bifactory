@@ -16,7 +16,7 @@ available on the object (e.g. \code{x$fit_esem}). Default \code{TRUE}.}
 }
 \value{
 Invisibly returns \code{x}; called for the side effect of printing
-  the comparison-pipeline overview.
+the comparison-pipeline overview.
 }
 \description{
 Print Method for esem_comparison_pipeline

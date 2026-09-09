@@ -16,7 +16,7 @@
 }
 \value{
 Invisibly returns \code{x}; called for the side effect of printing
-  the reliability table.
+the reliability table.
 }
 \description{
 Displays McDonald's omega and Cronbach's alpha indices following the

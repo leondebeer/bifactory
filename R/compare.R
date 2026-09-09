@@ -64,23 +64,39 @@ esem_compare <- function(esem_model,
   if (is.null(data))
     data <- lavaan::lavInspect(lav, "data")[[1]]  # works for single group
 
+  # lavaan stores MLR as estimator "ML" plus a robust test and SE, and WLSMV as
+  # "DWLS" plus a scaled-shifted test: carry the whole setting over so the CFA
+  # column reports the same (robust) statistics as the ESEM column.
+  opts <- lavaan::lavInspect(lav, "options")
+  same_estimator <- is.null(estimator) || identical(estimator, opts$estimator)
   if (is.null(estimator))
-    estimator <- lav@Options$estimator
+    estimator <- opts$estimator
+
+  cfa_args <- list(model = cfa_model, data = data, estimator = estimator,
+                   std.lv = TRUE, missing = opts$missing, ...)
+  if (same_estimator) {
+    cfa_args$test <- opts$test
+    cfa_args$se   <- opts$se
+  }
+  ov_ord <- lavaan::lavNames(lav, "ov.ord")
+  if (length(ov_ord)) {
+    cfa_args$ordered          <- ov_ord
+    cfa_args$parameterization <- opts$parameterization
+  }
 
   # Fit CFA
   message("Fitting comparison CFA...")
   cfa_fit <- tryCatch(
-    lavaan::cfa(cfa_model, data = data, estimator = estimator,
-                std.lv = TRUE, ...),
+    do.call(lavaan::cfa, cfa_args),
     error = function(e) stop("CFA fitting failed: ", conditionMessage(e), call. = FALSE)
   )
 
-  # Collect fit indices
+  # Collect fit indices (robust/scaled where the fit has them, like print())
   indices <- c("npar", "chisq", "df", "pvalue", "cfi", "tli",
                 "rmsea", "rmsea.ci.lower", "rmsea.ci.upper", "srmr", "aic", "bic")
 
-  esem_fi <- lavaan::fitMeasures(lav, fit.measures = indices)
-  cfa_fi  <- lavaan::fitMeasures(cfa_fit, fit.measures = indices)
+  esem_fi <- .fit_indices_lav(lav)[indices]
+  cfa_fi  <- .fit_indices_lav(cfa_fit)[indices]
 
   fit_table <- data.frame(
     index = indices,

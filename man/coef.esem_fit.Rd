@@ -15,8 +15,8 @@
 }
 \value{
 A \code{data.frame} of parameter estimates from
-  \code{lavaan::parameterEstimates()}, or the standardized solution from
-  \code{lavaan::standardizedsolution()} when \code{standardized = TRUE}.
+\code{lavaan::parameterEstimates()}, or the standardized solution from
+\code{lavaan::standardizedsolution()} when \code{standardized = TRUE}.
 }
 \description{
 Forwards to lavaan on \code{lavaan_fit(x)}. On custom WLSMV rotation paths,

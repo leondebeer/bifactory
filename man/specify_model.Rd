@@ -25,7 +25,7 @@ Example: \code{EX = c("y1","y2","y3"), MD = c("y4","y5","y6")}.}
 output headers and Mplus titles). Default \code{"ESEM Model"}.}
 
 \item{ordered}{Logical or character vector. If \code{TRUE}, all indicators
-are treated as ordered-categorical and the estimator is automatically
+are treated as ordinal and the estimator is automatically
 switched to \code{"WLSMV"} (both R and Mplus). If a character vector of
 item names is supplied, only those items are treated as ordered.
 Default \code{FALSE} (continuous).}
@@ -53,15 +53,15 @@ combination is detected.}
 \value{
 An object of class \code{"esem_spec"} containing:
 \describe{
-  \item{\code{factors}}{Named list of factor -> indicator assignments.}
-  \item{\code{factor_names}}{Character vector of factor names.}
-  \item{\code{all_items}}{Character vector of all indicators in order.}
-  \item{\code{nfactors}}{Number of specific factors.}
-  \item{\code{data}}{The supplied data frame.}
-  \item{\code{label}}{Model label.}
-  \item{\code{cfa_syntax}}{Ready-to-use lavaan CFA model string.}
-  \item{\code{target}}{Target matrix for ESEM target rotation.}
-  \item{\code{bifactor_target}}{Target matrix for B-ESEM.}
+\item{\code{factors}}{Named list of factor -> indicator assignments.}
+\item{\code{factor_names}}{Character vector of factor names.}
+\item{\code{all_items}}{Character vector of all indicators in order.}
+\item{\code{nfactors}}{Number of specific factors.}
+\item{\code{data}}{The supplied data frame.}
+\item{\code{label}}{Model label.}
+\item{\code{cfa_syntax}}{Ready-to-use lavaan CFA model string.}
+\item{\code{target}}{Target matrix for ESEM target rotation.}
+\item{\code{bifactor_target}}{Target matrix for B-ESEM.}
 }
 }
 \description{

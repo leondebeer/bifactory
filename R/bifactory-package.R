@@ -14,4 +14,5 @@
 #' @importFrom utils combn write.csv file.edit
 #' @importFrom graphics abline legend par plot plot.new title
 #' @importFrom methods getMethod isGeneric existsMethod
+#' @importFrom parallel makeCluster stopCluster parLapply clusterCall clusterEvalQ detectCores
 "_PACKAGE"

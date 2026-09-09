@@ -13,7 +13,7 @@
 }
 \value{
 Invisibly returns \code{x}; called for the side effect of printing
-  the model specification.
+the model specification.
 }
 \description{
 Print an esem_spec Object

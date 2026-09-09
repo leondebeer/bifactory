@@ -13,7 +13,7 @@
 }
 \value{
 Invisibly returns \code{x}; called for the side effect of printing
-  a formatted B-ESEM model overview to the console.
+a formatted B-ESEM model overview to the console.
 }
 \description{
 Print Method for besem_fit

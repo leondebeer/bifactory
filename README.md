@@ -26,8 +26,8 @@ bifactor target rotation requires under WLSMV.
 remotes::install_github("leondebeer/bifactory")
 ```
 
-Requires R (>= 4.1.0) and **lavaan (>= 0.6-21)** (0.6-22.2568+ recommended for
-ordered polychoric parity with Mplus).
+Requires R (>= 4.1.0) and **lavaan (>= 0.7-2)**, whose polychoric correlations
+are the exact two-step values that multi-group comparisons with Mplus depend on.
 
 ## Quick start
 

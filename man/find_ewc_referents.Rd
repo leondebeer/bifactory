@@ -14,7 +14,7 @@ from \code{\link{run_comparison}}).}
 }
 \value{
 A named character vector: names are factor names, values are the
-  selected referent item names (in the original case from \code{spec}).
+selected referent item names (in the original case from \code{spec}).
 }
 \description{
 For each factor, selects the primary indicator with the largest absolute

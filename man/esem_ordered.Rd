@@ -49,8 +49,10 @@ Convention: \code{NA} = free (no penalty), \code{0} = targeted toward zero.}
 \item{n_starts}{Integer. Number of random rotation starts when
 \code{method = "rotation"}. Default \code{100L}.}
 
-\item{r_obs_override}{Optional observed correlation matrix to use instead
-of polychoric estimation (for reproducibility / testing).}
+\item{r_obs_override}{Optional observed correlation matrix to fit instead
+of lavaan's polychoric correlations (for reproducibility / testing). The
+weight matrix still comes from lavaan, so a matrix that differs from
+lavaan's by more than 0.001 triggers a warning.}
 
 \item{std.lv}{Logical. Fix factor variances to 1. Default \code{TRUE}.}
 
@@ -89,7 +91,8 @@ Called automatically from \code{\link{esem}} when \code{ordered} is set.
 \code{ESTIMATOR = WLSMV; ROTATION = TARGET (oblique)}.
 
 \strong{Alternate} (\code{method = "rotation"}): custom DWLS pipeline (polychoric
-correlations via \pkg{psych}, \pkg{GPArotation}, sandwich + rotation Jacobian SEs).
+correlations, weight matrix and asymptotic covariance from one auxiliary
+\pkg{lavaan} fit, \pkg{GPArotation}, sandwich + rotation Jacobian SEs).
 \subsection{Mplus equivalence}{
 
 \preformatted{

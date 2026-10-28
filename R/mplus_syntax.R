@@ -22,10 +22,16 @@
 #' @param regressions Optional character vector of regression statements.
 #' @param covariances Optional character vector of covariance statements.
 #' @param data_file Character. Name of the data file. Default \code{"mydata.dat"}.
-#' @param missing_code Numeric. Missing value code. Default \code{999}.
-#' @param estimator Character. Default \code{"MLR"}.
+#' @param missing_code Missing value code. Default \code{999}. Use \code{"."}
+#'   for files written by \code{MplusAutomation::prepareMplusData()}, which
+#'   writes \code{MISSING = .;}.
+#' @param estimator Character. Default \code{"WLSMV"} when \code{ordered = TRUE},
+#'   otherwise \code{"MLR"}.
 #' @param output_path Character. Full path to write the .inp file. Returns
 #'   syntax string invisibly if \code{NULL}.
+#' @param ordered Logical. \code{TRUE} declares the factor indicators
+#'   \code{CATEGORICAL} and uses the theta parameterization, as
+#'   \code{\link{esem_ordered}} does. Default \code{FALSE}.
 #'
 #' @return The Mplus syntax as a character string (invisibly). Writes file
 #'   if \code{output_path} is supplied.
@@ -49,8 +55,9 @@ generate_mplus_syntax <- function(factors,
                                    covariances  = NULL,
                                    data_file    = "mydata.dat",
                                    missing_code = 999,
-                                   estimator    = "MLR",
-                                   output_path  = NULL) {
+                                   estimator    = if (ordered) "WLSMV" else "MLR",
+                                   output_path  = NULL,
+                                   ordered      = FALSE) {
 
   if (!is.list(factors) || is.null(names(factors)))
     stop("`factors` must be a named list.", call. = FALSE)
@@ -77,24 +84,15 @@ generate_mplus_syntax <- function(factors,
   all_vars <- c(all_esem_items, cfa_items, covariates)
 
   # VARIABLE section
-  names_line   <- .mplus_wrap("  NAMES = ",        all_vars)
-  usevars_line <- .mplus_wrap("  USEVARIABLES = ", all_vars)
+  names_line   <- paste0(.mplus_wrap("  NAMES = ",        all_vars), ";")
+  usevars_line <- paste0(.mplus_wrap("  USEVARIABLES = ", all_vars), ";")
+  cat_line     <- if (ordered)
+    paste0(.mplus_wrap("  CATEGORICAL = ", c(all_esem_items, cfa_items)), ";\n") else ""
 
   # BY blocks: primary items first, then cross-loadings~0, then (*1)
-  by_blocks <- vapply(factor_names, function(f) {
-    primary <- factors[[f]]
-    cross   <- setdiff(all_esem_items, primary)
-
-    primary_str <- paste(primary, collapse = " ")
-    cross_str   <- paste(paste0(cross, "~0"), collapse = " ")
-
-    block <- paste0("  ", f, " BY\n    ", primary_str)
-    if (nchar(cross_str) > 0)
-      block <- paste0(block, "\n    ", cross_str, " (*1);")
-    else
-      block <- paste0(block, " (*1);")
-    block
-  }, FUN.VALUE = character(1))
+  by_blocks <- vapply(factor_names, function(f)
+    .mplus_esem_by(f, factors[[f]], setdiff(all_esem_items, factors[[f]])),
+    FUN.VALUE = character(1))
 
   by_section <- paste(by_blocks, collapse = "\n\n")
 
@@ -102,7 +100,7 @@ generate_mplus_syntax <- function(factors,
   cfa_section <- ""
   if (!is.null(cfa_factors)) {
     cfa_blocks <- vapply(names(cfa_factors), function(f) {
-      paste0("  ", f, " BY ", paste(cfa_factors[[f]], collapse = " "), ";")
+      paste0(.mplus_wrap(paste0("  ", f, " BY "), cfa_factors[[f]]), ";")
     }, FUN.VALUE = character(1))
     cfa_section <- paste0(
       "\n  ! CFA factors\n",
@@ -132,10 +130,14 @@ generate_mplus_syntax <- function(factors,
     "VARIABLE:\n",
     names_line, "\n",
     usevars_line, "\n",
-    "  MISSING ARE ALL (", missing_code, ");\n\n",
+    cat_line,
+    .mplus_missing_line(missing_code), "\n\n",
     "ANALYSIS:\n",
     "  ESTIMATOR = ", estimator, ";\n",
-    "  ROTATION = TARGET;\n\n",
+    "  ROTATION = TARGET;",
+    .mplus_conv_lines(), "\n",
+    if (ordered) "  PARAMETERIZATION = THETA;\n" else "",
+    "\n",
     "MODEL:\n",
     "  ! Separate BY statement per factor, each with (*1)\n",
     "  ! Primary items listed first; cross-loadings marked ~0 after\n\n",
@@ -156,6 +158,23 @@ generate_mplus_syntax <- function(factors,
 
 
 # -- Internal helper -----------------------------------------------------------
+
+# One rotated BY statement: primary items, then cross-loadings targeted to
+# zero, then the (*1) rotation label; wrapped so no line passes Mplus's
+# 90-column limit.
+.mplus_esem_by <- function(f, primary, cross = character(0)) {
+  body <- .mplus_wrap("    ", primary)
+  if (length(cross))
+    body <- paste0(body, "\n", .mplus_wrap("    ", paste0(cross, "~0")))
+  paste0("  ", f, " BY\n", body, " (*1);")
+}
+
+# Mplus reads "." as missing only through MISSING = .; MISSING ARE ALL (.)
+# is an input error.  MplusAutomation::prepareMplusData() writes "." for NA.
+.mplus_missing_line <- function(missing_code) {
+  if (identical(as.character(missing_code), ".")) "  MISSING = .;"
+  else paste0("  MISSING ARE ALL (", missing_code, ");")
+}
 
 .mplus_wrap <- function(prefix, vars, width = 70) {
   lines   <- character(0)

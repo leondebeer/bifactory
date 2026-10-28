@@ -11,8 +11,9 @@ generate_mplus_syntax(
   covariances = NULL,
   data_file = "mydata.dat",
   missing_code = 999,
-  estimator = "MLR",
-  output_path = NULL
+  estimator = if (ordered) "WLSMV" else "MLR",
+  output_path = NULL,
+  ordered = FALSE
 )
 }
 \arguments{
@@ -27,12 +28,19 @@ names. Example: \code{list(EX = c("y1","y2"), MD = c("y3","y4"))}.}
 
 \item{data_file}{Character. Name of the data file. Default \code{"mydata.dat"}.}
 
-\item{missing_code}{Numeric. Missing value code. Default \code{999}.}
+\item{missing_code}{Missing value code. Default \code{999}. Use \code{"."}
+for files written by \code{MplusAutomation::prepareMplusData()}, which
+writes \code{MISSING = .;}.}
 
-\item{estimator}{Character. Default \code{"MLR"}.}
+\item{estimator}{Character. Default \code{"WLSMV"} when \code{ordered = TRUE},
+otherwise \code{"MLR"}.}
 
 \item{output_path}{Character. Full path to write the .inp file. Returns
 syntax string invisibly if \code{NULL}.}
+
+\item{ordered}{Logical. \code{TRUE} declares the factor indicators
+\code{CATEGORICAL} and uses the theta parameterization, as
+\code{\link{esem_ordered}} does. Default \code{FALSE}.}
 }
 \value{
 The Mplus syntax as a character string (invisibly). Writes file

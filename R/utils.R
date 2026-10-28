@@ -6,9 +6,11 @@
 
 
 # Pre-flight check used by ordered = TRUE paths (esem_ordered, besem_ordered).
-# psych::polychoric only supports up to 8 distinct response categories per item;
-# raise an informative error pointing the user to ordered = FALSE for items
-# above that bound, before any heavy computation kicks off.
+# The 8-category bound came from psych::polychoric(), which estimated the
+# polychorics up to 0.6.0; lavaan estimates them now and has no such bound,
+# but the ordinal paths keep accepting the same data as before.  Raise an
+# informative error pointing the user to ordered = FALSE for items above it,
+# before any heavy computation kicks off.
 .assert_polychoric_compatible <- function(data, indicators) {
   ncats <- vapply(indicators, function(it)
     length(unique(stats::na.omit(data[[it]]))), integer(1L))

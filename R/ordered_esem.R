@@ -8,7 +8,8 @@
 #' \code{ESTIMATOR = WLSMV; ROTATION = TARGET (oblique)}.
 #'
 #' **Alternate** (\code{method = "rotation"}): custom DWLS pipeline (polychoric
-#' correlations via \pkg{psych}, \pkg{GPArotation}, sandwich + rotation Jacobian SEs).
+#' correlations, weight matrix and asymptotic covariance from one auxiliary
+#' \pkg{lavaan} fit, \pkg{GPArotation}, sandwich + rotation Jacobian SEs).
 #'
 #' @inheritSection doc_estimator_paths Estimator paths
 #' @inheritSection doc_estimator_paths Missing-data defaults
@@ -32,8 +33,10 @@
 #'   \link[=doc_estimator_paths]{The lavaan_fit slot on custom WLSMV fits}).
 #' @param n_starts Integer. Number of random rotation starts when
 #'   \code{method = "rotation"}. Default \code{100L}.
-#' @param r_obs_override Optional observed correlation matrix to use instead
-#'   of polychoric estimation (for reproducibility / testing).
+#' @param r_obs_override Optional observed correlation matrix to fit instead
+#'   of lavaan's polychoric correlations (for reproducibility / testing). The
+#'   weight matrix still comes from lavaan, so a matrix that differs from
+#'   lavaan's by more than 0.001 triggers a warning.
 #' @param std.lv Logical. Fix factor variances to 1. Default \code{TRUE}.
 #' @param missing Character. Missing data handling passed to lavaan.
 #'   Default \code{"pairwise"} (Mplus-style polychoric pairs). Use
@@ -166,19 +169,14 @@ esem_ordered <- function(data,
 
   # =======================================--====================================
   # METHOD: "rotation"
-  # Custom pipeline: psych polychorics + DWLS extraction + oblique targetQ
-  # rotation.  Bypasses lavaan's polychoric floor bug (sqrt(.Machine$double.eps)
-  # clamping in lav_bvord_noexo_pi_cache) which biases rho upward by up to
-  # 0.024 on highly correlated item pairs with near-zero probability cells.
+  # Custom pipeline: DWLS on lavaan's polychorics (r, W and Gamma from one
+  # auxiliary lavaan fit) + oblique targetQ rotation.
   # Matches lavaan's rotation settings: normalize=FALSE (row.weights="none"),
   # 100 random starts, GPA algorithm.
   # Validated: loadings max|d|=0.001 vs Mplus, SEs max|d|=0.002.
   # ============--============================---==================================
   if (method == "rotation") {
 
-    if (!requireNamespace("psych",       quietly = TRUE))
-      stop("Package 'psych' is required for method='rotation'. ",
-           "Install: install.packages('psych')", call. = FALSE)
     if (!requireNamespace("GPArotation", quietly = TRUE))
       stop("Package 'GPArotation' is required for method='rotation'. ",
            "Install: install.packages('GPArotation')", call. = FALSE)
@@ -191,35 +189,42 @@ esem_ordered <- function(data,
     }
     cross_mask <- !is.na(target) & target == 0
 
-    # -- Stage 1: Polychoric correlations -------------------------------------
-    if (!is.null(r_obs_override)) {
-      message("Stage 1: Using supplied polychoric matrix (r_obs_override)...")
-      rn  <- rownames(r_obs_override)
-      idx <- match(tolower(indicators), tolower(rn))
-      if (anyNA(idx))
-        stop("r_obs_override item names do not match indicators.\n",
-             "  Missing: ", paste(indicators[is.na(idx)], collapse = ", "),
-             call. = FALSE)
-      if (anyDuplicated(idx)) {
-        dup_items <- indicators[duplicated(idx) | duplicated(idx, fromLast = TRUE)]
-        stop("r_obs_override item names collide case-insensitively: ",
-             paste(dup_items, collapse = ", "), call. = FALSE)
-      }
-      R_poly <- r_obs_override[idx, idx]
-      rownames(R_poly) <- colnames(R_poly) <- indicators
+    # -- Stage 1: Polychoric correlations, W and Gamma (auxiliary lavaan CFA) --
+    message("Stage 1: Polychoric correlations, W and Gamma from an auxiliary lavaan WLSMV CFA...")
+    simple_syntax <- paste0(factor_names[1L], " =~ ", paste(indicators, collapse = " + "))
+    fit_aux <- tryCatch(
+      lavaan::cfa(simple_syntax, data = data, ordered = indicators,
+                  std.lv = TRUE, parameterization = "theta", missing = missing),
+      error = function(e) stop("Auxiliary WLSMV CFA failed: ", conditionMessage(e), call. = FALSE)
+    )
+    ss <- .wls_sample_stats(fit_aux, indicators)
+    if (is.null(r_obs_override)) {
+      R_poly            <- ss$R
+      polychoric_source <- "lavaan"
     } else {
-      message("Stage 1: Polychoric correlations via psych::polychoric()...")
-      poly_result <- tryCatch(
-        psych::polychoric(data[, indicators, drop = FALSE]),
-        error = function(e) stop("polychoric() failed: ", conditionMessage(e), call. = FALSE)
-      )
-      R_poly <- poly_result$rho
+      message("  Using supplied polychoric matrix (r_obs_override).")
+      R_poly            <- .match_r_override(r_obs_override, indicators, ss$R)
+      polychoric_source <- "r_obs_override"
     }
+    n <- ss$n   # cases lavaan used (complete cases under listwise)
+
+    wls_obs_full <- ss$wls_obs
+    W_full       <- ss$W
+    Gamma_full   <- ss$Gamma
+    n_wls        <- length(wls_obs_full)
+    cor_idx      <- ss$cor_idx
+    W_cor        <- diag(as.matrix(W_full))[cor_idx]
+    Gamma_cor    <- Gamma_full[cor_idx, cor_idx, drop = FALSE]
+    n_pairs      <- length(cor_idx)
+    pairs        <- ss$pairs
+    r_obs        <- R_poly[cbind(pairs[, 1L], pairs[, 2L])]
+    message("  ", n_pairs, " polychoric pairs, ", n_wls, " WLS elements (source: ",
+            polychoric_source, ").")
 
     # -- Stage 2: Unrotated EFA starting values --------------------------------
     message("Stage 2: Unrotated EFA (factanal) + GPArotation::targetQ for starting values...")
     fa_unrotated <- tryCatch(
-      factanal(covmat = R_poly, factors = k, n.obs = n, rotation = "none"),
+      factanal(covmat = .pd_for_start(R_poly), factors = k, n.obs = n, rotation = "none"),
       error = function(e) stop("Unrotated EFA failed: ", conditionMessage(e), call. = FALSE)
     )
     A <- unclass(fa_unrotated$loadings)
@@ -230,52 +235,6 @@ esem_ordered <- function(data,
         GPArotation::targetQ(A, Target = target, maxit = 10000L, normalize = TRUE)
       )$loadings
     }, error = function(e) stop("Initial EFA rotation failed: ", conditionMessage(e), call. = FALSE))
-
-    # -- Stage 3: DWLS weight matrices via auxiliary CFA ----------------------
-    message("Stage 3: Extracting DWLS weight matrices (W, Gamma) from auxiliary lavaan CFA...")
-    simple_syntax <- paste0(factor_names[1L], " =~ ", paste(indicators, collapse = " + "))
-    fit_aux <- tryCatch(
-      lavaan::cfa(simple_syntax, data = data, ordered = indicators,
-                  std.lv = TRUE, parameterization = "theta", missing = missing),
-      error = function(e) stop("Auxiliary WLSMV CFA failed: ", conditionMessage(e), call. = FALSE)
-    )
-
-    wls_obs_raw <- lavaan::lavInspect(fit_aux, "wls.obs")
-    W_raw       <- lavaan::lavInspect(fit_aux, "wls.v")
-    Gamma_raw   <- lavaan::lavInspect(fit_aux, "gamma")
-
-    # Multi-group: use first group's matrices
-    if (is.list(wls_obs_raw) && !is.null(names(wls_obs_raw)) &&
-        !any(grepl("~~", names(wls_obs_raw)))) {
-      wls_obs_raw <- wls_obs_raw[[1L]]
-      W_raw       <- W_raw[[1L]]
-      Gamma_raw   <- Gamma_raw[[1L]]
-    }
-
-    wls_obs_full <- wls_obs_raw
-    W_full       <- W_raw
-    Gamma_full   <- as.matrix(Gamma_raw)
-
-    obs_names <- names(wls_obs_full)
-    n_wls     <- length(wls_obs_full)
-    cor_idx   <- grep("~~", obs_names)
-
-    if (length(cor_idx) == 0)
-      stop("Cannot identify polychoric correlation elements in wls.obs.", call. = FALSE)
-
-    W_cor     <- diag(as.matrix(W_full))[cor_idx]
-    Gamma_cor <- Gamma_full[cor_idx, cor_idx, drop = FALSE]
-    n_pairs   <- length(cor_idx)
-
-    pair_names <- obs_names[cor_idx]
-    pairs <- do.call(rbind, lapply(strsplit(pair_names, "~~"), function(nm)
-      c(match(nm[1], indicators), match(nm[2], indicators))))
-    if (anyNA(pairs))
-      stop("Polychoric pair names do not match indicators.", call. = FALSE)
-    swap          <- pairs[, 1L] < pairs[, 2L]
-    pairs[swap, ] <- pairs[swap, c(2L, 1L), drop = FALSE]
-    r_obs <- R_poly[cbind(pairs[, 1L], pairs[, 2L])]
-    message("  ", n_pairs, " polychoric pairs, ", n_wls, " WLS elements.")
 
     # -- Echelon parameterization ------------------------------------------------
     fixed_ij <- list()
@@ -526,6 +485,7 @@ esem_ordered <- function(data,
         factor_names         = factor_names,
         indicators           = indicators,
         polychoric           = R_poly,
+        polychoric_source    = polychoric_source,
         efa_loadings         = efa_rot,
         unrotated_loadings   = L_unrot,
         rotation_criterion   = best_fn,
@@ -649,6 +609,80 @@ esem_ordered <- function(data,
 }
 
 
+# -- WLS sample statistics of the custom DWLS paths ---------------------------
+# Polychoric correlations, W (wls.v) and Gamma all from one single-group
+# lavaan WLSMV fit, so the DWLS objective is fitted to the correlations its
+# weights were computed for.  Up to 0.6.0 the correlations came from
+# psych::polychoric(), which departs from lavaan and Mplus when items have
+# unequal numbers of categories (its non-global path with a continuity
+# correction), and the chi-square then reproduced in neither program.
+.wls_sample_stats <- function(fit, indicators) {
+  wls_obs   <- lavaan::lavInspect(fit, "wls.obs")
+  obs_names <- names(wls_obs)
+  cor_idx   <- grep("~~", obs_names)
+  if (length(cor_idx) == 0)
+    stop("Cannot identify polychoric correlation elements in wls.obs. ",
+         "This is a lavaan version issue -- please report.", call. = FALSE)
+
+  # (row_item, col_item) index pairs, row index > col index
+  pairs <- do.call(rbind, lapply(strsplit(obs_names[cor_idx], "~~"), function(nm)
+    c(match(nm[1], indicators), match(nm[2], indicators))))
+  if (anyNA(pairs))
+    stop("Polychoric pair names in wls.obs do not match `indicators`. ",
+         "Ensure all indicators are listed correctly.", call. = FALSE)
+  swap          <- pairs[, 1L] < pairs[, 2L]
+  pairs[swap, ] <- pairs[swap, c(2L, 1L), drop = FALSE]
+
+  R <- diag(length(indicators))
+  dimnames(R) <- list(indicators, indicators)
+  R[pairs] <- R[pairs[, c(2L, 1L), drop = FALSE]] <- wls_obs[cor_idx]
+
+  list(wls_obs = wls_obs,
+       W       = lavaan::lavInspect(fit, "wls.v"),
+       Gamma   = as.matrix(lavaan::lavInspect(fit, "gamma")),
+       cor_idx = cor_idx,
+       pairs   = pairs,
+       R       = R,
+       n       = lavaan::lavInspect(fit, "ntotal"))
+}
+
+# r_obs_override matched to `indicators` (case-insensitive, Mplus writes
+# upper case).  W and Gamma still come from lavaan's data, so a matrix that
+# departs from lavaan's polychorics makes the estimator inconsistent: warn.
+.match_r_override <- function(r_override, indicators, R_lav) {
+  rn  <- rownames(r_override)
+  idx <- match(tolower(indicators), tolower(rn))
+  if (anyNA(idx))
+    stop("r_obs_override item names do not match indicators.\n",
+         "  Missing: ", paste(indicators[is.na(idx)], collapse = ", "),
+         call. = FALSE)
+  if (anyDuplicated(idx)) {
+    dup_items <- indicators[duplicated(idx) | duplicated(idx, fromLast = TRUE)]
+    stop("r_obs_override item names collide case-insensitively: ",
+         paste(dup_items, collapse = ", "), call. = FALSE)
+  }
+  R <- as.matrix(r_override)[idx, idx]
+  dimnames(R) <- list(indicators, indicators)
+
+  d <- abs(R - R_lav)
+  if (max(d) > 1e-3) {
+    at <- which(d == max(d), arr.ind = TRUE)[1L, ]
+    warning("r_obs_override differs from lavaan's polychoric correlations by up to ",
+            signif(max(d), 3), " (", indicators[at[1]], " with ", indicators[at[2]],
+            "). W and Gamma are lavaan's, so the fitted correlations and the ",
+            "weight matrix come from different estimates.", call. = FALSE)
+  }
+  R
+}
+
+# factanal() needs a positive definite matrix; smooth only the copy used for
+# starting values, never the correlations the DWLS objective is fitted to.
+.pd_for_start <- function(R) {
+  if (min(eigen(R, symmetric = TRUE, only.values = TRUE)$values) > 0) R
+  else psych::cor.smooth(R)
+}
+
+
 # -- Analytical rotation Jacobian (implicit function theorem) -----------------
 # Computes d(vec(L_rotated)) / d(free_echelon_params) exactly for orthogonal
 # targetT rotation, avoiding numerical differentiation through the iterative
@@ -764,8 +798,10 @@ esem_ordered <- function(data,
 #'   specific-factor cross-loadings).
 #' @param n_starts Integer. Random rotation starts. Default \code{30L}
 #'   (matches Mplus).
-#' @param r_obs_override Optional observed correlation matrix to use instead
-#'   of polychoric estimation.
+#' @param r_obs_override Optional observed correlation matrix to fit instead
+#'   of lavaan's polychoric correlations. The weight matrix still comes from
+#'   lavaan, so a matrix that differs from lavaan's by more than 0.001
+#'   triggers a warning.
 #' @param group Character. Grouping variable for multi-group models.
 #' @param group_equal Character vector of lavaan equality constraints.
 #' @param missing Character. Missing data handling. Default \code{"listwise"}.
@@ -814,7 +850,6 @@ esem_ordered <- function(data,
 #' summary(fit_b_ord, fit.measures = TRUE, standardized = TRUE)
 #' }
 #'
-#' @importFrom psych polychoric fa
 #' @importFrom lavaan cfa
 #' @export
 besem_ordered <- function(data,
@@ -833,8 +868,6 @@ besem_ordered <- function(data,
   mc     <- match.call()
   method <- match.arg(method)
 
-  if (!requireNamespace("psych",       quietly = TRUE))
-    stop("Package 'psych' is required. Install: install.packages('psych')", call. = FALSE)
   if (!requireNamespace("GPArotation", quietly = TRUE))
     stop("Package 'GPArotation' is required. Install: install.packages('GPArotation')", call. = FALSE)
 
@@ -857,38 +890,45 @@ besem_ordered <- function(data,
   # make_bifactor_target produces no NAs (all 0s/1s), so btgt_rot == btgt
   btgt_rot <- btgt
 
-  # -- Stage 1: Polychoric correlations (shared by both methods) ----------------
-  if (!is.null(r_obs_override)) {
-    message("Stage 1: Using supplied polychoric matrix (r_obs_override, e.g. parsed from Mplus .out)...")
-    # Match Mplus row/col names (often UPPER case) to R's mixed-case indicators
-    rn  <- rownames(r_obs_override)
-    idx <- match(tolower(indicators), tolower(rn))
-    if (anyNA(idx))
-      stop("r_obs_override item names do not match indicators.\n",
-           "  Missing: ", paste(indicators[is.na(idx)], collapse = ", "),
-           call. = FALSE)
-    if (anyDuplicated(idx)) {
-      dup_items <- indicators[duplicated(idx) | duplicated(idx, fromLast = TRUE)]
-      stop("r_obs_override item names collide case-insensitively: ",
-           paste(dup_items, collapse = ", "), call. = FALSE)
-    }
-    R_poly <- r_obs_override[idx, idx]
-    rownames(R_poly) <- colnames(R_poly) <- indicators
-    message("  Matched ", length(indicators), " items from supplied matrix.")
-  } else {
-    message("Stage 1: Polychoric correlations via psych::polychoric()...")
-    poly_result <- tryCatch(
-      psych::polychoric(data[, indicators, drop = FALSE]),
-      error = function(e) stop("polychoric() failed: ", conditionMessage(e), call. = FALSE)
-    )
-    R_poly <- poly_result$rho
+  # -- Shared lavaan CFA fitting helper -----------------------------------------
+  # grouped = FALSE fits the pooled sample: the DWLS path estimates one loading
+  # matrix from all cases, so its r, W and Gamma must describe all cases.
+  .fit_wlsmv <- function(syntax, grouped = TRUE) {
+    args <- list(model            = syntax,
+                 data             = data,
+                 ordered          = indicators,
+                 std.lv           = TRUE,
+                 parameterization = "theta",
+                 missing          = missing)
+    if (grouped && !is.null(group))       args$group       <- group
+    if (grouped && !is.null(group_equal)) args$group.equal <- group_equal
+    args <- c(args, list(...))
+    do.call(lavaan::cfa, args)
   }
+
+  # -- Stage 1: Polychoric correlations, W and Gamma (shared by both methods) ---
+  message("Stage 1: Polychoric correlations, W and Gamma from an auxiliary lavaan WLSMV CFA...")
+  simple_syntax <- paste0(g_name, " =~ ", paste(indicators, collapse = " + "))
+  fit_aux <- tryCatch(
+    .fit_wlsmv(simple_syntax, grouped = FALSE),
+    error = function(e) stop("Auxiliary WLSMV CFA failed: ", conditionMessage(e), call. = FALSE)
+  )
+  ss <- .wls_sample_stats(fit_aux, indicators)
+  if (is.null(r_obs_override)) {
+    R_poly            <- ss$R
+    polychoric_source <- "lavaan"
+  } else {
+    message("  Using supplied polychoric matrix (r_obs_override, e.g. parsed from Mplus .out).")
+    R_poly            <- .match_r_override(r_obs_override, indicators, ss$R)
+    polychoric_source <- "r_obs_override"
+  }
+  n <- ss$n   # cases lavaan used (complete cases under listwise)
 
   # -- Stage 2: Unrotated EFA + bifactor targetT rotation (shared) --------------
   message("Stage 2: Bifactor EFA (factanal + GPArotation::targetT, ",
           k, " factors: 1 general + ", k - 1L, " specific)...")
   fa_unrotated <- tryCatch(
-    factanal(covmat = R_poly, factors = k, n.obs = n, rotation = "none"),
+    factanal(covmat = .pd_for_start(R_poly), factors = k, n.obs = n, rotation = "none"),
     error = function(e) stop("Unrotated EFA failed: ", conditionMessage(e), call. = FALSE)
   )
   A <- unclass(fa_unrotated$loadings)
@@ -906,20 +946,6 @@ besem_ordered <- function(data,
     lapply(seq(i + 1L, k), function(j)
       paste0(all_factor_names[i], " ~~ 0*", all_factor_names[j]))))
 
-  # -- Shared lavaan CFA fitting helper -----------------------------------------
-  .fit_wlsmv <- function(syntax) {
-    args <- list(model            = syntax,
-                 data             = data,
-                 ordered          = indicators,
-                 std.lv           = TRUE,
-                 parameterization = "theta",
-                 missing          = missing)
-    if (!is.null(group))       args$group       <- group
-    if (!is.null(group_equal)) args$group.equal <- group_equal
-    args <- c(args, list(...))
-    do.call(lavaan::cfa, args)
-  }
-
   # ============================================================================
   # METHOD: "rotation"
   # Fit unrestricted WLSMV model (echelon identification), then apply
@@ -936,7 +962,7 @@ besem_ordered <- function(data,
     # The 4-factor bifactor model cannot be estimated directly by lavaan (the
     # G factor's large loadings on all items create near-singular Hessian with
     # 60+ free parameters). Instead we:
-    #   Stage 3: Extract DWLS weight matrices (W, Gamma) from an auxiliary CFA.
+    #   Stage 1: Polychorics, W and Gamma from one auxiliary lavaan CFA (above).
     #   Stage 4: Minimize the DWLS objective over all n_ixk loadings via nlminb.
     #   Stage 5: Apply bifactor targetT rotation to the unrotated DWLS solution.
     #   Stage 6: Sandwich ACM + numDeriv rotation delta method -> SEs.
@@ -945,79 +971,29 @@ besem_ordered <- function(data,
     #   Stage 9: Return (loadings from polychoric fit are already STDYX).
     # ==========================================================================
 
-    # -- Stage 3: Extract DWLS weight matrices via auxiliary 1-factor CFA ------
-    # W (wls.v) and Gamma depend on data + thresholds only, not factor structure.
-    # Any converging WLSMV fit on the same data yields the same matrices.
-    message("Stage 3: Extracting DWLS weight matrices (W, Gamma) from auxiliary lavaan CFA...")
-    simple_syntax <- paste0(g_name, " =~ ", paste(indicators, collapse = " + "))
-    fit_aux <- tryCatch(
-      .fit_wlsmv(simple_syntax),
-      error = function(e) stop("Auxiliary WLSMV CFA failed: ", conditionMessage(e), call. = FALSE)
-    )
-
-    wls_obs_raw  <- lavaan::lavInspect(fit_aux, "wls.obs")
-    W_raw        <- lavaan::lavInspect(fit_aux, "wls.v")
-    Gamma_raw    <- lavaan::lavInspect(fit_aux, "gamma")
-
-    # Multi-group auxiliary CFA: lavInspect returns a list (one per group).
-    # W and Gamma depend only on marginal thresholds, so any group's matrices
-    # are equivalent for the DWLS objective.  Use the first group.
-    if (is.list(wls_obs_raw) && !is.null(names(wls_obs_raw)) &&
-        !any(grepl("~~", names(wls_obs_raw)))) {
-      wls_obs_raw <- wls_obs_raw[[1L]]
-      W_raw       <- W_raw[[1L]]
-      Gamma_raw   <- Gamma_raw[[1L]]
-    }
-
-    wls_obs_full <- wls_obs_raw
-    W_full       <- W_raw
-    Gamma_full   <- as.matrix(Gamma_raw)
-
-    obs_names    <- names(wls_obs_full)
+    # -- Stage 3: DWLS inputs from the Stage 1 auxiliary fit ------------------
+    # r_obs, W and Gamma are lavaan's estimates for the same (pooled) sample.
+    wls_obs_full <- ss$wls_obs
+    W_full       <- ss$W
+    Gamma_full   <- ss$Gamma
     n_wls        <- length(wls_obs_full)   # n_pairs + n_thresholds
-    cor_idx      <- grep("~~", obs_names)
-
-    if (length(cor_idx) == 0)
-      stop("Cannot identify polychoric correlation elements in wls.obs. ",
-           "This is a lavaan version issue -- please report.", call. = FALSE)
+    cor_idx      <- ss$cor_idx
 
     # wls.v is a square diagonal matrix (not a vector) -- extract the diagonal.
     # as.vector() would serialize the FULL matrix and give wrong indices.
-    # W and Gamma depend on thresholds (marginal distributions) not on the
-    # bivariate polychoric estimates, so they are taken from lavaan throughout.
     W_cor     <- diag(as.matrix(W_full))[cor_idx]
     Gamma_cor <- Gamma_full[cor_idx, cor_idx, drop = FALSE]
     n_pairs   <- length(cor_idx)
+    pairs     <- ss$pairs                  # row index > col index
+    r_obs     <- R_poly[cbind(pairs[, 1L], pairs[, 2L])]
+    message("  ", n_pairs, " polychoric correlation pairs (source: ", polychoric_source, ").")
 
-    # Parse (row_item, col_item) index pairs for each polychoric correlation
-    pair_names <- obs_names[cor_idx]
-    pairs <- do.call(rbind, lapply(strsplit(pair_names, "~~"), function(nm)
-      c(match(nm[1], indicators), match(nm[2], indicators))))
-    if (anyNA(pairs))
-      stop("Polychoric pair names in wls.obs do not match `indicators`. ",
-           "Ensure all indicators are listed correctly.", call. = FALSE)
-
-    # Ensure row index > col index (lower-triangle convention)
-    swap          <- pairs[, 1L] < pairs[, 2L]
-    pairs[swap, ] <- pairs[swap, c(2L, 1L), drop = FALSE]
-
-    # r_obs: polychoric correlations for the DWLS objective.
-    # We use R_poly (psych::polychoric or r_obs_override) rather than lavaan's
-    # wls.obs polychorics.  Empirically, psych and Mplus agree to < 0.001 on
-    # all pairs, whereas lavaan can differ by up to ~0.024 on highly-correlated
-    # items (e.g., batCI1~~batCI2 = 0.825 in lavaan vs 0.801 in Mplus/psych).
-    # That discrepancy shifts the DWLS objective surface and can push the
-    # rotation to a different local minimum.  Using psych/Mplus polychorics
-    # throughout gives rotation solutions that match Mplus to within rounding.
-    # W and Gamma still come from lavaan -- they depend on thresholds, not on
-    # the bivariate correlation estimates.
-    # R_poly is either psych::polychoric (default) or r_obs_override (user-supplied).
-    # Both paths use the same polychoric matrix set in Stage 1.
-    r_obs <- R_poly[cbind(pairs[, 1L], pairs[, 2L])]
-    if (!is.null(r_obs_override))
-      message("  DWLS objective uses r_obs_override polychoric correlations.")
-
-    message("  ", n_pairs, " polychoric correlation pairs extracted.")
+    # The stored lavaan_fit keeps the groups, so factor_scores() can score
+    # each group; estimation above used the pooled fit.
+    lav_store <- if (is.null(group)) fit_aux else tryCatch(
+      .fit_wlsmv(simple_syntax),
+      error = function(e) stop("Auxiliary multi-group WLSMV CFA failed: ",
+                               conditionMessage(e), call. = FALSE))
 
     # -- Echelon parameterization -----------------------------------------------
     # ML EFA (factanal) satisfies LL' + Psi = R_poly exactly, so the DWLS
@@ -1350,7 +1326,7 @@ besem_ordered <- function(data,
 
     return(structure(
       list(
-        lavaan_fit           = fit_aux,   # auxiliary 1-factor CFA (weight extraction)
+        lavaan_fit           = lav_store, # auxiliary 1-factor CFA (weight extraction)
         syntax               = simple_syntax,
         nfactors             = k,
         rotation             = "TargetT bifactor (DWLS + post-hoc rotation, A&M 2009)",
@@ -1359,6 +1335,7 @@ besem_ordered <- function(data,
         specific_factors     = specific_factors,
         indicators           = indicators,
         polychoric           = R_poly,
+        polychoric_source    = polychoric_source,
         efa_loadings         = efa_rot,
         unrotated_loadings   = L_unrot,    # echelon-parameterised DWLS solution pre-rotation
         rotation_criterion   = best_fn,    # best sum-of-squared cross-loadings achieved
@@ -1419,6 +1396,7 @@ besem_ordered <- function(data,
       specific_factors = specific_factors,
       indicators       = indicators,
       polychoric       = R_poly,
+      polychoric_source = polychoric_source,
       efa_loadings     = efa_rot,
       estimator        = fit@Options$estimator,
       call             = mc

@@ -13,7 +13,9 @@ generate_mplus_besem_syntax(
   covariances = NULL,
   data_file = "mydata.dat",
   missing_code = 999,
-  output_path = NULL
+  output_path = NULL,
+  ordered = FALSE,
+  estimator = if (ordered) "WLSMV" else "MLR"
 )
 }
 \arguments{
@@ -31,10 +33,21 @@ generate_mplus_besem_syntax(
 
 \item{data_file}{Character. Data file name. Default \code{"mydata.dat"}.}
 
-\item{missing_code}{Numeric. Missing value code. Default \code{999}.}
+\item{missing_code}{Missing value code. Default \code{999}. Use \code{"."}
+for files written by \code{MplusAutomation::prepareMplusData()}, which
+writes \code{MISSING = .;}.}
 
 \item{output_path}{Character. Path to write .inp file. Returns syntax
 invisibly if \code{NULL}.}
+
+\item{ordered}{Logical. \code{TRUE} declares the indicators
+\code{CATEGORICAL} and keeps Mplus's default delta parameterization, the
+model \code{\link{besem_ordered}} fits: residual variances are one minus
+the communality, so Mplus reports a negative one (Heywood case) where the
+theta parameterization would not. Default \code{FALSE}.}
+
+\item{estimator}{Character. Default \code{"WLSMV"} when \code{ordered = TRUE},
+otherwise \code{"MLR"}.}
 }
 \value{
 Mplus syntax string (invisibly). Writes file if \code{output_path}

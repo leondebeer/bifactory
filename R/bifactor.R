@@ -376,9 +376,18 @@ make_bifactor_target <- function(specific_factors,
 #' @param regressions Optional character vector of regression statements.
 #' @param covariances Optional character vector of covariance statements.
 #' @param data_file Character. Data file name. Default \code{"mydata.dat"}.
-#' @param missing_code Numeric. Missing value code. Default \code{999}.
+#' @param missing_code Missing value code. Default \code{999}. Use \code{"."}
+#'   for files written by \code{MplusAutomation::prepareMplusData()}, which
+#'   writes \code{MISSING = .;}.
 #' @param output_path Character. Path to write .inp file. Returns syntax
 #'   invisibly if \code{NULL}.
+#' @param ordered Logical. \code{TRUE} declares the indicators
+#'   \code{CATEGORICAL} and keeps Mplus's default delta parameterization, the
+#'   model \code{\link{besem_ordered}} fits: residual variances are one minus
+#'   the communality, so Mplus reports a negative one (Heywood case) where the
+#'   theta parameterization would not. Default \code{FALSE}.
+#' @param estimator Character. Default \code{"WLSMV"} when \code{ordered = TRUE},
+#'   otherwise \code{"MLR"}.
 #'
 #' @return Mplus syntax string (invisibly). Writes file if \code{output_path}
 #'   supplied.
@@ -392,7 +401,9 @@ generate_mplus_besem_syntax <- function(specific_factors,
                                          covariances  = NULL,
                                          data_file    = "mydata.dat",
                                          missing_code = 999,
-                                         output_path  = NULL) {
+                                         output_path  = NULL,
+                                         ordered      = FALSE,
+                                         estimator    = if (ordered) "WLSMV" else "MLR") {
 
   specific_names <- names(specific_factors)
 
@@ -415,28 +426,21 @@ generate_mplus_besem_syntax <- function(specific_factors,
   all_vars <- c(all_indicators, cfa_items, covariates)
 
   # VARIABLE section
-  names_line   <- .mplus_wrap("  NAMES = ", all_vars)
-  usevars_line <- .mplus_wrap("  USEVARIABLES = ", all_vars)
+  names_line   <- paste0(.mplus_wrap("  NAMES = ", all_vars), ";")
+  usevars_line <- paste0(.mplus_wrap("  USEVARIABLES = ", all_vars), ";")
+  cat_line     <- if (ordered)
+    paste0(.mplus_wrap("  CATEGORICAL = ", c(all_indicators, cfa_items)), ";\n") else ""
 
   # G factor -- loads on all items, no target restrictions
-  g_items_str <- paste(all_indicators, collapse = " ")
   g_block <- paste0("  ! General factor -- loads freely on all items\n",
-                    "  ", g_name, " BY\n    ", g_items_str, " (*1);")
+                    .mplus_esem_by(g_name, all_indicators))
 
-  # Specific factors -- same as regular ESEM target rotation
-  specific_blocks <- vapply(specific_names, function(f) {
-    primary <- specific_factors[[f]]
-    cross   <- setdiff(all_indicators, primary)
-    # Primary items first, then cross-loadings targeted to zero
-    primary_str <- paste(primary, collapse = " ")
-    cross_str   <- paste(paste0(cross, "~0"), collapse = " ")
-    block <- paste0("  ", f, " BY\n    ", primary_str)
-    if (nchar(cross_str) > 0)
-      block <- paste0(block, "\n    ", cross_str, " (*1);")
-    else
-      block <- paste0(block, " (*1);")
-    block
-  }, FUN.VALUE = character(1))
+  # Specific factors -- same as regular ESEM target rotation: primary items
+  # first, then cross-loadings targeted to zero
+  specific_blocks <- vapply(specific_names, function(f)
+    .mplus_esem_by(f, specific_factors[[f]],
+                   setdiff(all_indicators, specific_factors[[f]])),
+    FUN.VALUE = character(1))
 
   by_section <- paste(
     c(g_block, specific_blocks),
@@ -447,7 +451,7 @@ generate_mplus_besem_syntax <- function(specific_factors,
   cfa_section <- ""
   if (!is.null(cfa_factors)) {
     cfa_blocks <- vapply(names(cfa_factors), function(f) {
-      paste0("  ", f, " BY ", paste(cfa_factors[[f]], collapse = " "), ";")
+      paste0(.mplus_wrap(paste0("  ", f, " BY "), cfa_factors[[f]]), ";")
     }, FUN.VALUE = character(1))
     cfa_section <- paste0("\n  ! CFA factors\n", paste(cfa_blocks, collapse = "\n"))
   }
@@ -470,10 +474,12 @@ generate_mplus_besem_syntax <- function(specific_factors,
     "VARIABLE:\n",
     names_line, "\n",
     usevars_line, "\n",
-    "  MISSING ARE ALL (", missing_code, ");\n\n",
+    cat_line,
+    .mplus_missing_line(missing_code), "\n\n",
     "ANALYSIS:\n",
-    "  ESTIMATOR = MLR;\n",
-    "  ROTATION = TARGET (orthogonal); !Use for B-ESEM\n\n",
+    "  ESTIMATOR = ", estimator, ";\n",
+    "  ROTATION = TARGET (orthogonal); !Use for B-ESEM",
+    .mplus_conv_lines(), "\n\n",
     "MODEL:\n",
     "  ! G loads on all items (no target restrictions)\n",
     "  ! Specific factors orthogonal to G and each other\n\n",

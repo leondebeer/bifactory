@@ -1,3 +1,40 @@
+# bifactory 0.6.1
+
+## Ordinal DWLS paths
+
+* `besem_ordered()`, `esem_ordered(method = "rotation")`: polychoric
+  correlations now come from lavaan (same auxiliary fit as the weight
+  matrix and asymptotic covariance matrix), not `psych::polychoric()`.
+  psych departs from lavaan and Mplus when items differ in number of
+  response categories. For those items chi-square, fit indices and loadings
+  now equal lavaan's WLSMV fit of the unrotated model. Standardized loadings
+  were within 0.005 of Mplus 9 in validation runs. Equal numbers of
+  categories: loadings agree with 0.6.0 to about four decimals. See
+  `test-polychoric_source.R`.
+* New `polychoric_source` element (`"lavaan"` or `"r_obs_override"`).
+  `r_obs_override` warns if it is more than 0.001 from lavaan's
+  correlations, since the weight matrix is lavaan's either way.
+* N = cases lavaan uses (complete cases under `missing = "listwise"`).
+* Grouping variable: correlations, weight matrix and N come from the pooled
+  sample, which is what the single loading matrix is estimated from.
+  `lavaan_fit` keeps the groups for `factor_scores()`.
+
+## Mplus syntax
+
+* `generate_mplus_syntax()`, `generate_mplus_besem_syntax()`: semicolon
+  after NAMES and USEVARIABLES. BY lists wrap at Mplus's 90 columns. See
+  `test-mplus_syntax.R`.
+* New `ordered` argument: `TRUE` writes CATEGORICAL and WLSMV. ESEM syntax
+  uses the theta parameterization, as `esem_ordered()` does. B-ESEM syntax
+  keeps the Mplus default (delta), which is the model `besem_ordered()`
+  fits, so Mplus reports a negative residual variance when there is one.
+  `generate_mplus_besem_syntax()` also gets `estimator`.
+* Both writers set `ITERATIONS = 10000` and `CONVERGENCE = 0.000001`, like
+  the invariance syntax. Mplus's default criterion can stop short of the
+  optimum that R reaches.
+* `missing_code = "."` writes `MISSING = .;` (the NA code of
+  `MplusAutomation::prepareMplusData()`).
+
 # bifactory 0.6.0
 
 Fixes and additions prompted by the review of the Teacher's Corner

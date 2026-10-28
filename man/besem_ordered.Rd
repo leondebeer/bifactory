@@ -39,8 +39,10 @@ specific-factor cross-loadings).}
 \item{n_starts}{Integer. Random rotation starts. Default \code{30L}
 (matches Mplus).}
 
-\item{r_obs_override}{Optional observed correlation matrix to use instead
-of polychoric estimation.}
+\item{r_obs_override}{Optional observed correlation matrix to fit instead
+of lavaan's polychoric correlations. The weight matrix still comes from
+lavaan, so a matrix that differs from lavaan's by more than 0.001
+triggers a warning.}
 
 \item{group}{Character. Grouping variable for multi-group models.}
 

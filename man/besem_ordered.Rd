@@ -61,7 +61,9 @@ when comparing with \code{\link{esem_ordered}} (default \code{"pairwise"}).}
 An object of class \code{c("besem_fit_ordered","besem_fit","esem_fit")}.
 For \code{method = "rotation"}, \code{lavaan_fit} is auxiliary (one-factor CFA);
 use \code{std_rotated_loadings}, \code{wlsmv_stats}, \code{\link{std_loadings}},
-and \code{\link[lavaan:fitMeasures]{fitMeasures}(x)}. For \code{method = "set-esem"},
+and \code{\link[lavaan:fitMeasures]{fitMeasures}(x)}; \code{communalities} holds
+each item's communality, and a value above 1 (a Heywood case, negative
+residual variance) gives a warning. For \code{method = "set-esem"},
 \code{lavaan_fit} is the fitted bifactor CFA.
 }
 \description{

@@ -44,7 +44,10 @@
 #'   \code{\link{besem_ordered}} on the same data, set \code{missing} explicitly
 #'   on both calls (\code{besem_ordered} defaults to \code{"listwise"}).
 #' @param group Character. Grouping variable name for multi-group models.
-#' @param group_equal Character vector of lavaan equality constraints.
+#' @param group_equal Character vector of lavaan equality constraints. With
+#'   \code{"loadings"} and a \code{group}, the common loading matrix is
+#'   rotated without row scaling, as in Mplus (see "Rotation across groups"
+#'   in \code{\link{esem_invariance}}).
 #' @param heywood_fix Logical. Retry rotation with Cholesky unrotation when a
 #'   standardised loading exceeds 1. Default \code{TRUE}.
 #' @param n_obs Ignored (kept for backward compatibility).
@@ -55,7 +58,9 @@
 #' \code{method = "rotation"}, \code{lavaan_fit} is an auxiliary one-factor CFA;
 #' use \code{std_rotated_loadings}, \code{wlsmv_stats}, and
 #' \code{\link{std_loadings}}. Slot \code{estimator} is \code{"WLSMV"} or
-#' \code{"DWLS"} depending on path.
+#' \code{"DWLS"} depending on path. For \code{method = "rotation"},
+#' \code{communalities} holds each item's communality; a value above 1 (a
+#' Heywood case, negative residual variance) gives a warning.
 #'
 #' @details
 #' ## Mplus equivalence
@@ -269,25 +274,17 @@ esem_ordered <- function(data,
       as.vector(-2 * WR %*% L)[free_vec_idx]
     }
 
-    start_vec                <- as.vector(efa_rot)
-    start_vec[fixed_vec_idx] <- 0
+    L_zeroed                <- efa_rot
+    L_zeroed[fixed_vec_idx] <- 0
 
-    opt <- tryCatch(
-      nlminb(start     = start_vec[free_vec_idx],
-             objective = f_dwls_ech,
-             gradient  = grad_dwls_ech,
-             control   = list(iter.max = 3000L, eval.max = 8000L,
-                              rel.tol  = 1e-10, x.tol   = 1e-10)),
-      error = function(e) stop("DWLS nlminb failed: ", conditionMessage(e), call. = FALSE)
-    )
+    opt <- .dwls_echelon_fit(L_zeroed, A, f_dwls_ech, grad_dwls_ech, free_vec_idx)
     if (opt$convergence != 0)
       warning("DWLS optimization may not have fully converged (code=", opt$convergence,
               "): ", opt$message, call. = FALSE)
 
-    lam_unrot               <- rep(0, n_i * k)
-    lam_unrot[free_vec_idx] <- opt$par
-    L_unrot <- matrix(lam_unrot, n_i, k)
+    L_unrot <- opt$L
     message("  Converged (code=", opt$convergence, ")  F = ", round(opt$objective, 4))
+    h2 <- .dwls_communalities(L_unrot, indicators)
 
     # -- Stage 5: Oblique targetQ rotation --------------------------------------
     # Key: normalize=FALSE matches lavaan's row.weights="none" for target rotation.
@@ -415,7 +412,7 @@ esem_ordered <- function(data,
     G_full_wls[thr_idx, n_free + seq_len(n_thr)] <- diag(n_thr)    # threshold params
 
     GtWG_fwls     <- crossprod(G_full_wls, diag(W_full_diag) %*% G_full_wls)
-    GtWG_fwls_inv <- solve(GtWG_fwls)
+    GtWG_fwls_inv <- MASS::ginv(GtWG_fwls)  # singular at a runaway (Heywood) solution
 
     H_fwls          <- W_full_sqrt %*% G_full_wls %*% GtWG_fwls_inv %*%
                        t(G_full_wls) %*% W_full_sqrt
@@ -488,6 +485,7 @@ esem_ordered <- function(data,
         polychoric_source    = polychoric_source,
         efa_loadings         = efa_rot,
         unrotated_loadings   = L_unrot,
+        communalities        = h2,
         rotation_criterion   = best_fn,
         rotated_loadings     = L_rot,
         std_rotated_loadings = L_rot,  # polychoric -> already STDYX
@@ -534,7 +532,7 @@ esem_ordered <- function(data,
   )
   if (!is.null(group))       cfa_args$group       <- group
   if (!is.null(group_equal)) cfa_args$group.equal <- group_equal
-  cfa_args <- c(cfa_args, list(...))
+  cfa_args <- .mg_rotation_args(c(cfa_args, list(...)))
 
   fit <- tryCatch(
     do.call(lavaan::cfa, cfa_args),
@@ -814,7 +812,9 @@ esem_ordered <- function(data,
 #' @return An object of class \code{c("besem_fit_ordered","besem_fit","esem_fit")}.
 #' For \code{method = "rotation"}, \code{lavaan_fit} is auxiliary (one-factor CFA);
 #' use \code{std_rotated_loadings}, \code{wlsmv_stats}, \code{\link{std_loadings}},
-#' and \code{\link[lavaan:fitMeasures]{fitMeasures}(x)}. For \code{method = "set-esem"},
+#' and \code{\link[lavaan:fitMeasures]{fitMeasures}(x)}; \code{communalities} holds
+#' each item's communality, and a value above 1 (a Heywood case, negative
+#' residual variance) gives a warning. For \code{method = "set-esem"},
 #' \code{lavaan_fit} is the fitted bifactor CFA.
 #'
 #' @section Method \code{"set-esem"} vs \code{"rotation"}:
@@ -1017,7 +1017,7 @@ besem_ordered <- function(data,
     n_free        <- length(free_vec_idx)   # n_i*k - k*(k-1)/2  (= 66 for 18 items, 4 factors)
 
     # -- Stage 4: DWLS optimization (echelon-constrained, 66 free params) -------
-    # Start from bifactor EFA rotation with constrained elements zeroed out.
+    # Two starts from the EFA solution (.dwls_echelon_fit()).
     # With 6 zeros enforced the ML exact-reproduction no longer holds and
     # T_naive > 0 at the constrained minimum.
     message("Stage 4: DWLS optimization via nlminb (", n_free, " free echelon loadings)...")
@@ -1047,27 +1047,19 @@ besem_ordered <- function(data,
       grad_full[free_vec_idx]
     }
 
-    # Start: bifactor EFA solution with 6 constrained elements zeroed
-    start_vec                    <- as.vector(efa_rot)
-    start_vec[fixed_vec_idx]     <- 0
-    start_free                   <- start_vec[free_vec_idx]
+    # Starts: bifactor EFA solution with 6 constrained elements zeroed, and the
+    # unrotated EFA solution rotated into echelon form
+    L_zeroed                     <- unname(efa_rot)
+    L_zeroed[fixed_vec_idx]      <- 0
 
-    opt <- tryCatch(
-      nlminb(start     = start_free,
-             objective = f_dwls_ech,
-             gradient  = grad_dwls_ech,
-             control   = list(iter.max = 3000L, eval.max = 8000L,
-                              rel.tol  = 1e-10, x.tol   = 1e-10)),
-      error = function(e) stop("DWLS nlminb failed: ", conditionMessage(e), call. = FALSE)
-    )
+    opt <- .dwls_echelon_fit(L_zeroed, A, f_dwls_ech, grad_dwls_ech, free_vec_idx)
     if (opt$convergence != 0)
       warning("DWLS optimization may not have fully converged (code=", opt$convergence,
               "): ", opt$message, call. = FALSE)
 
-    lam_unrot                  <- rep(0, n_i * k)
-    lam_unrot[free_vec_idx]    <- opt$par
-    L_unrot                    <- matrix(lam_unrot, n_i, k)
+    L_unrot                      <- opt$L
     message("  Converged (code=", opt$convergence, ")  F = ", round(opt$objective, 4))
+    h2 <- .dwls_communalities(L_unrot, indicators)
 
     # -- Stage 5: Bifactor targetT rotation with random restarts ----------------
     # Mplus TARGET convention: NA = free (G column + primary loadings),
@@ -1338,6 +1330,7 @@ besem_ordered <- function(data,
         polychoric_source    = polychoric_source,
         efa_loadings         = efa_rot,
         unrotated_loadings   = L_unrot,    # echelon-parameterised DWLS solution pre-rotation
+        communalities        = h2,
         rotation_criterion   = best_fn,    # best sum-of-squared cross-loadings achieved
         rotated_loadings     = L_rot,
         std_rotated_loadings = L_r_std,

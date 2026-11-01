@@ -1,3 +1,54 @@
+# bifactory 0.6.2
+
+## Multi-group rotation
+
+* With loadings equal across groups (weak invariance and above in
+  `esem_invariance()`; `esem()`, `besem()` and `esem_ordered()` with `group`
+  and `group_equal = "loadings"`) the common loading matrix is now rotated
+  without row scaling, as Mplus does. lavaan's default scales the rows by
+  the residual variances averaged over the groups, which gives the same fit
+  but a different rotation of it. From the weak level on, standardized
+  loadings and their standard errors now match Mplus 9 without any
+  alignment, for ESEM and B-ESEM, MLR and WLSMV (loadings already matched at
+  the configural level). See `test-mg_rotation.R` and "Rotation across
+  groups" in `?esem_invariance`.
+
+* `group.partial` on a factor loading (`"F=~x"`) now stops with an error in
+  ESEM and B-ESEM models. lavaan rotates one common loading matrix and
+  reports it in every group, so a freed loading would be shown as equal.
+
+## Rotation standard errors
+
+* ESEM with oblique target rotation (`esem()`, `esem_ordered()`,
+  `esem_invariance(model = "esem")`) now computes rotation standard errors
+  with lavaan's delta method (`rotation.se = "delta"`) and a tighter rotation
+  convergence criterion (`gpa.tol = 1e-6`). Standardized loading standard
+  errors at the configural level and in single-group models agree more
+  closely with Mplus 9 (largest difference on the test data 0.014 before,
+  0.0024 after; see `test-mg_rotation.R`). B-ESEM keeps
+  lavaan's default, which is the closer of the two for orthogonal rotation.
+  A `rotation.se` or `gpa.tol` passed by the user is kept.
+
+* `esem_invariance()` fits the second start of each level without rotation
+  and standard errors, since only its fit-function value is compared, and
+  refits it in full only when it is kept. Results are unchanged, and the
+  levels fit faster.
+
+## Ordinal DWLS paths
+
+* `besem_ordered()` and `esem_ordered(method = "rotation")` warn when an
+  item's communality exceeds 1 (a Heywood case, negative residual variance)
+  and return the communalities as `communalities`.
+
+* Their DWLS optimization now starts from two points and keeps a proper
+  solution when one is reached. On data where it previously ran off to a
+  communality far above 1 although a proper solution exists, it now returns
+  that solution. A message says when a solution with a lower discrepancy but a communality
+  above 1 was set aside.
+
+* `esem_ordered(method = "rotation")` no longer stops with a singular-matrix
+  error at the chi-square step when the solution is improper.
+
 # bifactory 0.6.1
 
 ## Ordinal DWLS paths

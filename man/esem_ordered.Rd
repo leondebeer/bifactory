@@ -64,7 +64,10 @@ on both calls (\code{besem_ordered} defaults to \code{"listwise"}).}
 
 \item{group}{Character. Grouping variable name for multi-group models.}
 
-\item{group_equal}{Character vector of lavaan equality constraints.}
+\item{group_equal}{Character vector of lavaan equality constraints. With
+\code{"loadings"} and a \code{group}, the common loading matrix is
+rotated without row scaling, as in Mplus (see "Rotation across groups"
+in \code{\link{esem_invariance}}).}
 
 \item{heywood_fix}{Logical. Retry rotation with Cholesky unrotation when a
 standardised loading exceeds 1. Default \code{TRUE}.}
@@ -79,7 +82,9 @@ An object of class \code{c("esem_fit_ordered", "esem_fit")}. For
 \code{method = "rotation"}, \code{lavaan_fit} is an auxiliary one-factor CFA;
 use \code{std_rotated_loadings}, \code{wlsmv_stats}, and
 \code{\link{std_loadings}}. Slot \code{estimator} is \code{"WLSMV"} or
-\code{"DWLS"} depending on path.
+\code{"DWLS"} depending on path. For \code{method = "rotation"},
+\code{communalities} holds each item's communality; a value above 1 (a
+Heywood case, negative residual variance) gives a warning.
 }
 \description{
 Fits ESEM on ordinal indicators (WLSMV / Theta parameterization).

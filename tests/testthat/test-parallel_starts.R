@@ -23,19 +23,22 @@ test_that(".fit_with_retry runs both starts on the cluster and applies the same 
   cl <- .make_cluster(2L)
   on.exit(parallel::stopCluster(cl), add = TRUE)
   f <- lavaan::cfa(misfit, data = hs)
-  # the alternative start is made 1 % deeper (a real well), so it must be chosen
-  fit_fn <- function(ctrl = NULL, opts = NULL) {
+  # an alternative start made 1 % deeper (a real well) must be chosen, and is
+  # then refitted in full on the master; a tie keeps the worker's default fit
+  fit_fn <- function(rel) function(ctrl = NULL, opts = NULL) {
     g <- f
-    if (!is.null(opts$start)) g@optim$fx <- f@optim$fx * (1 - 1e-2)
+    if (!is.null(opts$start)) g@optim$fx <- f@optim$fx * (1 - rel)
     list(lavaan_fit = g, tag = if (is.null(opts$start)) "default" else "alt",
          pid = Sys.getpid())
   }
-  par_fit <- .fit_with_retry(fit_fn, verbose = FALSE, cl = cl)
-  seq_fit <- .fit_with_retry(fit_fn, verbose = FALSE)
+  par_fit <- .fit_with_retry(fit_fn(1e-2), verbose = FALSE, cl = cl)
+  seq_fit <- .fit_with_retry(fit_fn(1e-2), verbose = FALSE)
   expect_identical(par_fit$tag, "alt")
   expect_identical(seq_fit$tag, "alt")
-  expect_false(par_fit$pid == Sys.getpid())      # it was fitted on a worker
   expect_equal(.inv_fx(par_fit), .inv_fx(seq_fit))
+  par_tie <- .fit_with_retry(fit_fn(0), verbose = FALSE, cl = cl)
+  expect_identical(par_tie$tag, "default")
+  expect_false(par_tie$pid == Sys.getpid())      # it was fitted on a worker
 })
 
 test_that("esem_invariance(cores = 2) reproduces the sequential fit statistics", {

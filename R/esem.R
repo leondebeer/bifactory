@@ -50,7 +50,9 @@
 #'   multi-group ESEM (configural by default).
 #' @param group_equal Character vector of lavaan parameter labels to constrain
 #'   equal across groups, e.g. \code{"loadings"} (metric) or
-#'   \code{c("loadings", "intercepts")} (scalar).
+#'   \code{c("loadings", "intercepts")} (scalar). With \code{"loadings"} and a
+#'   \code{group}, the common loading matrix is rotated without row scaling,
+#'   as in Mplus (see "Rotation across groups" in \code{\link{esem_invariance}}).
 #' @param missing Character. Missing data handling for **continuous** fits.
 #'   Default \code{"listwise"}; use \code{"fiml"} for full-information ML.
 #'   When \code{ordered} is set, passed to \code{\link{esem_ordered}} (default
@@ -255,7 +257,7 @@ esem <- function(data,
   if (length(rotation_args)) cfa_args$rotation.args <- rotation_args
 
   # User overrides (e.g. se = "robust.huber.white")
-  cfa_args <- c(cfa_args, list(...))
+  cfa_args <- .mg_rotation_args(c(cfa_args, list(...)))
 
   fit <- tryCatch(
     do.call(lavaan::cfa, cfa_args),

@@ -137,6 +137,37 @@
 #' reference group gives an equivalent model with the same fit but differently
 #' oriented loadings and factor covariances.
 #'
+#' @section Rotation across groups:
+#'
+#' At the configural level each group is rotated on its own, with the rows of
+#' its loading matrix scaled by the model-implied item variances, as in
+#' Mplus. From the weak level on the loadings are equal across groups and the
+#' common loading matrix is rotated once, without row scaling
+#' (\code{rotation.args = list(std.ov = FALSE)} in lavaan), which is what
+#' Mplus does. lavaan's default would scale the rows by the residual variances
+#' averaged over the groups: the same fit, but a different rotation of it,
+#' with standardized loadings 0.03 to 0.09 away from Mplus's on
+#' \code{psych::bfi} (0.44 in one bifactor model) and standard errors up to
+#' 0.003 away. Up to 0.6.1 bifactory used that default.
+#'
+#' The unscaled rotation works on the loadings in the metric of the first
+#' group. \code{esem_invariance()} passes \code{group.label} so that this is
+#' the first sorted group level, as in the generated Mplus syntax; direct
+#' calls of \code{esem()}, \code{besem()} or \code{esem_ordered()} with
+#' \code{group} and \code{group_equal = "loadings"} follow lavaan's order (first
+#' appearance in the data) unless \code{group.label} is passed through
+#' \code{...}. The agreement with Mplus was checked for target rotation.
+#' Mplus does not allow Kaiser row standardization with equal loadings, while
+#' lavaan keeps Kaiser weights for varimax and promax.
+#'
+#' With oblique target rotation (ESEM) the rotation standard errors use
+#' lavaan's delta method (\code{rotation.se = "delta"}) with
+#' \code{rotation.args$gpa.tol = 1e-6}, which agrees more closely with Mplus
+#' at the configural level than lavaan's default \code{"bordered"}; the
+#' tighter tolerance keeps the delta-method standard errors from depending on
+#' the random rotation starts. B-ESEM (orthogonal target rotation) keeps
+#' \code{"bordered"}. A \code{rotation.se} passed through \code{...} is kept.
+#'
 #' @seealso \code{\link{specify_model}}, \code{\link{esem}},
 #'   \code{\link{esem_ordered}}
 #'
@@ -191,6 +222,7 @@ esem_invariance <- function(spec,
 
   if (!inherits(spec, "esem_spec"))
     stop("`spec` must be an esem_spec from specify_model().", call. = FALSE)
+  .check_group_partial(list(...)[["group.partial"]])
   if (is.null(spec$group)) {
     message("Invariance testing skipped: no group variable in spec.\n",
             "  Set group in specify_model(), e.g.: specify_model(..., group = 'sex')")
@@ -777,19 +809,23 @@ print.esem_invariance <- function(x, ...) {
     }, verbose = FALSE, cl = cl), error = function(e) NULL)
   })
   if (any(vapply(fits, is.null, logical(1)))) return(NULL)
-  tabs <- lapply(seq_along(fits), function(i) {
-    lf <- fits[[i]]$lavaan_fit
-    pt <- lavaan::parTable(lf)
-    # parTable() holds the rotated solution; the optimizer works on the unrotated
-    # one (the efa-fixed loadings dropped), which lavaan keeps in est.unrotated.
-    if (!is.null(pt$est.unrotated)) { pt$est <- pt$est.unrotated; pt$free <- pt$free.unrotated }
-    if (sum(pt$free > 0L) != length(lf@optim$x)) return(NULL)
-    data.frame(lhs = pt$lhs, op = pt$op, rhs = pt$rhs, group = i, free = pt$free, est = pt$est)
-  })
+  tabs <- lapply(seq_along(fits), function(i) .unrotated_start(fits[[i]]$lavaan_fit, group = i))
   if (any(vapply(tabs, is.null, logical(1)))) return(NULL)
   x0 <- do.call(rbind, tabs)
   attr(x0, "fx") <- vapply(fits, .inv_fx, numeric(1))
   x0
+}
+
+# A fit's solution as lavaan start values: a parameter table matched row by
+# row (lavaan caps a numeric `start` at 1000 entries).  parTable() holds the
+# rotated solution; the optimizer works on the unrotated one (the efa-fixed
+# loadings dropped), which lavaan keeps in est.unrotated.
+.unrotated_start <- function(lf, group = NULL) {
+  pt <- lavaan::parTable(lf)
+  if (!is.null(pt$est.unrotated)) { pt$est <- pt$est.unrotated; pt$free <- pt$free.unrotated }
+  if (sum(pt$free > 0L) != length(lf@optim$x)) return(NULL)
+  data.frame(lhs = pt$lhs, op = pt$op, rhs = pt$rhs,
+             group = if (is.null(group)) pt$group else group, free = pt$free, est = pt$est)
 }
 
 
@@ -848,7 +884,7 @@ print.esem_invariance <- function(x, ...) {
   if (parallel_starts) {
     # The two starts are independent fits: both at once on the worker processes.
     both <- parallel::parLapply(
-      cl, list(NULL, list(start = alt_start)),
+      cl, list(NULL, list(start = alt_start, .fx_only = TRUE)),
       function(o, fit_fn) tryCatch(.with_notes(suppressMessages(fit_fn(ctrl = NULL, opts = o))),
                                    error = function(e) NULL),
       fit_fn = fit_fn)
@@ -868,7 +904,8 @@ print.esem_invariance <- function(x, ...) {
     # alt_start = NULL skips this (configural fits started from the per-group
     # optima, .configural_starts()).
     if (!parallel_starts && !is.null(alt_start)) {
-      r <- tryCatch(.with_notes(suppressMessages(fit_fn(ctrl = NULL, opts = list(start = alt_start)))),
+      r <- tryCatch(.with_notes(suppressMessages(fit_fn(ctrl = NULL,
+                                                        opts = list(start = alt_start, .fx_only = TRUE)))),
                     error = function(e) NULL)
       alt <- .set_notes(r$value, r$notes)
     }
@@ -879,8 +916,21 @@ print.esem_invariance <- function(x, ...) {
     # reported solution away from the default start's well, which is where
     # Mplus's default start lands.  Real wells differ by 1 % or more (two- and
     # four-country configural: 9 %, eight-country configural: 1.2 %).
-    if (.inv_converged(alt) &&
-        isTRUE(.inv_fx(alt) < .inv_fx(fit) * (1 - .ALT_START_GAIN))) fit <- alt
+    # The alternative was fitted for its fit function only (.fx_only: no
+    # rotation, no SEs); a winner is refitted in full from its own solution.
+    # lavaan resets starting factor covariances that are not positive definite
+    # (HS weak B-ESEM, simple start: group-2 variances -18 and -224), so the
+    # refit can re-optimize; it must still beat the default fit by the margin.
+    deeper <- function(a) .inv_converged(a) &&
+      isTRUE(.inv_fx(a) < .inv_fx(fit) * (1 - .ALT_START_GAIN))
+    if (deeper(alt)) {
+      x0 <- .unrotated_start(alt$lavaan_fit)
+      r  <- if (!is.null(x0)) tryCatch(
+        .with_notes(suppressMessages(fit_fn(ctrl = NULL, opts = list(start = x0)))),
+        error = function(e) NULL)
+      full <- .set_notes(r$value, r$notes)
+      if (deeper(full)) fit <- full
+    }
     if (verbose) message(" OK")
     return(fit)
   }
@@ -1292,7 +1342,7 @@ print.esem_invariance <- function(x, ...) {
   )
   if (!is.null(spec$group))  cfa_args$group       <- spec$group
   if (!is.null(group_equal)) cfa_args$group.equal <- group_equal
-  cfa_args <- c(cfa_args, dots)
+  cfa_args <- .mg_rotation_args(c(cfa_args, dots))
 
   fit <- .muffle_rotated_vcov(tryCatch(
     do.call(lavaan::cfa, cfa_args),
@@ -1428,7 +1478,7 @@ print.esem_invariance <- function(x, ...) {
   )
   if (!is.null(spec$group))  cfa_args$group       <- spec$group
   if (!is.null(group_equal)) cfa_args$group.equal <- group_equal
-  cfa_args <- c(cfa_args, dots)
+  cfa_args <- .mg_rotation_args(c(cfa_args, dots))
 
   fit <- .muffle_rotated_vcov(tryCatch(
     do.call(lavaan::cfa, cfa_args),
@@ -1510,7 +1560,7 @@ print.esem_invariance <- function(x, ...) {
   )
   if (!is.null(spec$group))   cfa_args$group       <- spec$group
   if (!is.null(group_equal))  cfa_args$group.equal <- group_equal
-  cfa_args <- c(cfa_args, list(...))
+  cfa_args <- .mg_rotation_args(c(cfa_args, list(...)))
 
   fit <- .muffle_rotated_vcov(tryCatch(
     do.call(lavaan::cfa, cfa_args),

@@ -29,6 +29,108 @@
 }
 
 
+# Rotation of a multi-group efa() fit whose loadings are equal across groups.
+# lavaan's default (std.ov = TRUE) scales the rows of the common loading
+# matrix by diag(AA') plus the residual variances averaged over the groups
+# before rotating; Mplus rotates them unscaled.  Same fit, a different
+# rotation of it: from the weak level on the loadings differed from Mplus by
+# 0.03 to 0.09 (STDYX) and their SEs by up to 0.003.  Unscaled, both agree to
+# 0.0005 (validation/_validate_061_groups.R).  Configural and single-group
+# fits keep lavaan's default, which already matches Mplus there.
+.mg_rotation_args <- function(cfa_args) {
+  # [[ ]] not $: list `$` partially matches, so $group would find group.equal
+  grp <- cfa_args[["group"]]
+  ra  <- cfa_args[["rotation.args"]]
+  dat <- cfa_args[["data"]]
+  # lavaan accepts std.ov and std_ov but errors when both are given; a group
+  # variable with one level leaves lavaan with one group, where Mplus scales
+  .check_group_partial(cfa_args[["group.partial"]])
+  # .fx_only: a fit used only for its fit-function value (the second start in
+  # .fit_with_retry()), so no rotation and no SEs.  On a poor second solution
+  # GPA can stall short of gpa.tol = 1e-6, and the delta SEs re-run it once per
+  # parameter (bfi G = 3 ordinal strict: hours, for a fit 51 % worse).
+  if (isTRUE(cfa_args[[".fx_only"]])) {
+    cfa_args[c(".fx_only", "rotation.args", "rotation.se")] <- NULL
+    cfa_args[["rotation"]] <- "none"
+    cfa_args[["se"]] <- "none"
+    return(cfa_args)
+  }
+  if (!is.null(grp) && "loadings" %in% cfa_args[["group.equal"]] &&
+      is.null(ra[["std.ov"]]) && is.null(ra[["std_ov"]]) &&
+      (is.null(dat) || length(unique(stats::na.omit(as.data.frame(dat)[[grp]]))) > 1L))
+    cfa_args[["rotation.args"]][["std.ov"]] <- FALSE
+  # Oblique target rotation: lavaan's delta-method rotation SEs are closer to
+  # Mplus than its bordered default (bfi STDYX, single group 0.0014 -> 0.0006,
+  # G = 4 configural 0.0046 -> 0.0009).  Their Jacobian is a forward difference
+  # over re-runs of GPA, so GPA has to stop tighter than lavaan's 1e-5, or the
+  # SEs move with the random rotation starts (by up to 0.004).  Orthogonal
+  # rotation (B-ESEM) keeps bordered, which is the closer of the two there.
+  if (identical(tolower(cfa_args[["rotation"]]), "target") && !isTRUE(ra[["orthogonal"]]) &&
+      is.null(cfa_args[["rotation.se"]])) {
+    cfa_args[["rotation.se"]] <- "delta"
+    if (is.null(ra[["gpa.tol"]]) && is.null(ra[["gpa_tol"]]))
+      cfa_args[["rotation.args"]][["gpa.tol"]] <- 1e-6
+  }
+  cfa_args
+}
+
+# lavaan accepts group.partial on an efa loading (the df count drops by one) but
+# then copies group 1's rotated loading matrix into every group, so the freed
+# loading is reported as equal.
+.check_group_partial <- function(group_partial) {
+  if (any(grepl("=~", group_partial, fixed = TRUE)))
+    stop("`group.partial` cannot free a factor loading in an ESEM or B-ESEM model (",
+         paste(grep("=~", group_partial, fixed = TRUE, value = TRUE), collapse = ", "),
+         "): lavaan rotates one common loading matrix and reports it in every group, ",
+         "so the freed loading would still be shown as equal.", call. = FALSE)
+  invisible(NULL)
+}
+
+# Communalities of a DWLS solution fitted to polychoric correlations.  The DWLS
+# objective uses the off-diagonal correlations only, so nothing keeps a row's
+# sum of squared loadings below 1; Mplus's delta parameterization is unbounded
+# too and reports such a solution as improper.  Rotation-invariant, so the
+# unrotated loadings serve.
+.dwls_communalities <- function(L, items) {
+  h2  <- stats::setNames(rowSums(L^2), items)
+  bad <- names(h2)[h2 > 1]
+  if (length(bad))
+    warning("Improper solution (Heywood case): communality above 1 for ",
+            paste(bad, collapse = ", "), " (largest ", sprintf("%.3f", max(h2)),
+            "), so the residual variance 1 - communality is negative.", call. = FALSE)
+  h2
+}
+
+# Stage 4 of the custom DWLS paths: nlminb over the free echelon loadings from
+# two starts, the rotated EFA solution with its echelon cells set to 0 and the
+# unrotated EFA solution A rotated into echelon form (same LL', so it starts at
+# the EFA's discrepancy).  The DWLS objective can be lower in an improper
+# region (communality above 1) than at the proper local minimum, and either
+# start can end in either, so a converged proper solution is kept; among equals
+# the lower objective, the first start on a tie.
+.dwls_echelon_fit <- function(L_zeroed, A, f, g, free_idx) {
+  k    <- ncol(A)
+  ctrl <- list(iter.max = 3000L, eval.max = 8000L, rel.tol = 1e-10, x.tol = 1e-10)
+  fits <- lapply(list(L_zeroed, A %*% qr.Q(qr(t(A[seq_len(k), , drop = FALSE])))), function(L0) {
+    o <- tryCatch(stats::nlminb(as.vector(L0)[free_idx], f, g, control = ctrl),
+                  error = function(e) stop("DWLS nlminb failed: ", conditionMessage(e), call. = FALSE))
+    lam <- rep(0, length(L0)); lam[free_idx] <- o$par
+    o$L <- matrix(lam, nrow(L0), k)
+    o$heywood <- max(rowSums(o$L^2)) > 1
+    o$proper  <- o$convergence == 0 && !o$heywood
+    o
+  })
+  ok   <- vapply(fits, `[[`, logical(1L), "proper")
+  obj  <- vapply(fits, `[[`, numeric(1L), "objective")
+  pool <- if (any(ok)) which(ok) else seq_along(fits)
+  best <- fits[[pool[obj[pool] <= min(obj[pool]) * (1 + 1e-8)][1L]]]
+  if (best$proper && any(vapply(fits, `[[`, logical(1L), "heywood") & obj < best$objective))
+    message("  A solution with a lower DWLS discrepancy has a communality above 1 ",
+            "(improper); the proper local solution is reported.")
+  best
+}
+
+
 # FIML factor analysis: handles missing data case-by-case.
 # Retained for future use if lavaan's FIML EFA convergence improves.
 # Currently unused: continuous B-ESEM uses listwise + lavaan EFA instead.

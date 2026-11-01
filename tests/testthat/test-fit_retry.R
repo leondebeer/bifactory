@@ -14,9 +14,10 @@ fx         <- function(fit) fit$lavaan_fit@optim$fx
 
 # A fit function that returns the saturated model for one start and the
 # misfitting model for the other (attempt 0 passes no `start`, i.e. default).
+# A start table is the winning alternative's own solution, refitted in full.
 fit_by_start <- function(saturated_start) {
   function(ctrl = NULL, opts = NULL) {
-    st <- if (is.null(opts$start)) "default" else opts$start
+    st <- if (is.null(opts$start)) "default" else if (is.data.frame(opts$start)) "simple" else opts$start
     m  <- if (identical(st, saturated_start)) saturated else misfit
     list(lavaan_fit = lavaan::cfa(m, data = hs))
   }
@@ -41,6 +42,37 @@ test_that(".fit_with_retry ignores an alternative start that is not materially d
   }
   expect_identical(.fit_with_retry(fit_fn(1e-4), verbose = FALSE)$tag, "default")   # 0.01 %: a tie
   expect_identical(.fit_with_retry(fit_fn(1e-2), verbose = FALSE)$tag, "alt")       # 1 %: a deeper well
+})
+
+# The alternative only has to supply a fit-function value, so it is fitted without
+# rotation and SEs (.fx_only); on bfi G = 3 ordinal ESEM its strict solution (51 %
+# worse) stalled GPA at gpa.tol 1e-6 and the delta SEs took hours.  A winner is
+# refitted in full from its own solution.
+test_that(".fit_with_retry fits the alternative for its fit function only and refits a winner", {
+  calls <- list()
+  fit_fn <- function(ctrl = NULL, opts = NULL) {
+    calls <<- c(calls, list(opts))
+    m <- if (is.null(opts$start)) misfit else saturated
+    list(lavaan_fit = lavaan::cfa(m, data = hs,
+                                  start = if (is.data.frame(opts$start)) opts$start else "default"))
+  }
+  fit <- .fit_with_retry(fit_fn, verbose = FALSE)
+  expect_length(calls, 3L)
+  expect_true(calls[[2]]$.fx_only)
+  expect_s3_class(calls[[3]]$start, "data.frame")
+  expect_null(calls[[3]]$.fx_only)
+  expect_equal(fx(fit), 0, tolerance = 1e-8)
+  # a refit that does not stay materially deeper (lavaan reset its start) is dropped
+  shallow_refit <- function(ctrl = NULL, opts = NULL) {
+    m <- if (isTRUE(opts$.fx_only)) saturated else misfit
+    list(lavaan_fit = lavaan::cfa(m, data = hs), tag = if (is.data.frame(opts$start)) "refit" else "default")
+  }
+  expect_identical(.fit_with_retry(shallow_refit, verbose = FALSE)$tag, "default")
+  fx_args <- .mg_rotation_args(list(rotation = "target", rotation.se = "delta", group = "g",
+                                    group.equal = "loadings", .fx_only = TRUE,
+                                    rotation.args = list(target = matrix(0, 2, 2))))
+  expect_identical(fx_args[c("rotation", "se")], list(rotation = "none", se = "none"))
+  expect_false(any(c(".fx_only", "rotation.args", "rotation.se") %in% names(fx_args)))
 })
 
 test_that(".mplus_conv_lines writes a tight first criterion and formats small criteria in full", {

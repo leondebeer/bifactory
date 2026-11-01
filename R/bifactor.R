@@ -40,7 +40,10 @@
 #'   ordered B-ESEM use \code{method = "rotation"} there (default in
 #'   \code{\link{run_comparison}}).
 #' @param group Character. Grouping variable for multi-group B-ESEM.
-#' @param group_equal Character vector of lavaan equality constraints.
+#' @param group_equal Character vector of lavaan equality constraints. With
+#'   \code{"loadings"} and a \code{group}, the common loading matrix is
+#'   rotated without row scaling, as in Mplus (see "Rotation across groups"
+#'   in \code{\link{esem_invariance}}).
 #' @param missing Character. Missing data handling for **continuous** B-ESEM.
 #'   Default \code{"listwise"}. When \code{ordered} is set, passed to
 #'   \code{\link{besem_ordered}} (default \code{"listwise"} there; the pipeline
@@ -240,7 +243,7 @@ besem <- function(data,
   if (!is.null(ordered))     cfa_args$ordered      <- ordered
   if (!is.null(group))       cfa_args$group        <- group
   if (!is.null(group_equal)) cfa_args$group.equal  <- group_equal
-  cfa_args <- c(cfa_args, list(...))
+  cfa_args <- .mg_rotation_args(c(cfa_args, list(...)))
 
   # Seed scoped to this call via withr (RNG state restored afterwards) so
   # random-start rotation is reproducible without disturbing the caller's

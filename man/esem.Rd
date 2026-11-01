@@ -64,7 +64,9 @@ multi-group ESEM (configural by default).}
 
 \item{group_equal}{Character vector of lavaan parameter labels to constrain
 equal across groups, e.g. \code{"loadings"} (metric) or
-\code{c("loadings", "intercepts")} (scalar).}
+\code{c("loadings", "intercepts")} (scalar). With \code{"loadings"} and a
+\code{group}, the common loading matrix is rotated without row scaling,
+as in Mplus (see "Rotation across groups" in \code{\link{esem_invariance}}).}
 
 \item{missing}{Character. Missing data handling for \strong{continuous} fits.
 Default \code{"listwise"}; use \code{"fiml"} for full-information ML.

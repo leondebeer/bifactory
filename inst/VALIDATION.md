@@ -29,9 +29,28 @@ expected to match Mplus B-ESEM loadings.
 
 | Model | Data | Groups validated | Notes |
 |-------|------|------------------|-------|
-| B-ESEM ordinal | BFI (25 items, 5 specific + G) | G ∈ {2, 3, 4, 5} | df match Mplus at all six levels; max \|ΔCFI\| ≤ 0.001; max \|ΔSRMR\| ≤ 0.001; standardized loadings within 0.001 at all six levels and in every group once the R solution is carried into Mplus's rotation orientation (model-implied polychoric correlations within 0.001 as well); group-wise Procrustes alignment of standardized loadings understates the agreement in non-reference groups from the weak level on (0.01 to 0.02), because their free factor covariances make the standardization rotation-dependent |
+| ESEM and B-ESEM, continuous (MLR) and ordinal (WLSMV) | BFI (25 items; 5 factors, or 5 specific + G) | G ∈ {2, 3, 4} (0.6.2) | df match Mplus at all six levels; max \|ΔCFI\|, \|ΔRMSEA\|, \|ΔSRMR\| ≤ 0.0006; standardized loadings within 0.0006 of Mplus at all six levels and in every group, with no alignment; standard errors within 0.0007 from the weak level on, and at configural within 0.0010 (ESEM, delta-method rotation SEs) and 0.0006 (B-ESEM), except one group at G = 3 MLR, see below |
+| B-ESEM ordinal | BFI | G = 5 (0.6.0) | df match at all six levels; max \|ΔCFI\| ≤ 0.001; max \|ΔSRMR\| ≤ 0.001 |
 | B-ESEM ordinal | BAT 2023 (23 items, 4 specific + G) | G ∈ {2, 4, 8} | df match; see the paragraph below for what agrees and what does not |
-| ESEM ordinal | BFI | G ∈ {2, 3, 4} | Theta-parameterization identification fixes |
+
+From the weak level on, the common loading matrix is rotated without row scaling, as
+Mplus does whenever EFA loadings are held equal (see "Rotation across groups" in
+`?esem_invariance`). Up to 0.6.1 bifactory used lavaan's default, which scales the rows
+by the residual variances averaged over the groups: the same fit, but standardized
+loadings 0.03 to 0.09 away from Mplus's.
+
+Since 0.6.2, ESEM with oblique target rotation computes rotation standard errors with
+lavaan's delta method and `gpa.tol = 1e-6`. lavaan's default ("bordered") left
+configural and single-group standardized loading SEs up to 0.005 away from Mplus on BFI
+and up to 0.014 on Holzinger-Swineford. B-ESEM keeps "bordered", which is the closer
+of the two for orthogonal rotation. The remaining configural gap is one group at G = 3
+MLR (0.010, item A2). There Mplus's multi-group MLR result changes with the order of
+the groups or of the variables: its H0 scaling factor is 1.2013 in the default order and
+1.1993 after reordering, which explains its 2.8-unit higher configural chi-square too.
+After reordering, Mplus gives lavaan's SEs and chi-square. Its single-group runs on the
+same rows also agree with lavaan, and lavaan's results do not depend on the order.
+Before calling a multi-group configural MLR gap an R-side difference, rerun Mplus per
+group (`USEOBSERVATIONS`) or with the group or variable order permuted.
 
 **Caution:** with many groups the R side is slow (bfi: 19 / 40 / 100 minutes at
 G = 3 / 4 / 5 on 25 items with the two starts of each level fitted one after the

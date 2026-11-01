@@ -164,6 +164,39 @@ reference group gives an equivalent model with the same fit but differently
 oriented loadings and factor covariances.
 }
 
+\section{Rotation across groups}{
+
+
+At the configural level each group is rotated on its own, with the rows of
+its loading matrix scaled by the model-implied item variances, as in
+Mplus. From the weak level on the loadings are equal across groups and the
+common loading matrix is rotated once, without row scaling
+(\code{rotation.args = list(std.ov = FALSE)} in lavaan), which is what
+Mplus does. lavaan's default would scale the rows by the residual variances
+averaged over the groups: the same fit, but a different rotation of it,
+with standardized loadings 0.03 to 0.09 away from Mplus's on
+\code{psych::bfi} (0.44 in one bifactor model) and standard errors up to
+0.003 away. Up to 0.6.1 bifactory used that default.
+
+The unscaled rotation works on the loadings in the metric of the first
+group. \code{esem_invariance()} passes \code{group.label} so that this is
+the first sorted group level, as in the generated Mplus syntax; direct
+calls of \code{esem()}, \code{besem()} or \code{esem_ordered()} with
+\code{group} and \code{group_equal = "loadings"} follow lavaan's order (first
+appearance in the data) unless \code{group.label} is passed through
+\code{...}. The agreement with Mplus was checked for target rotation.
+Mplus does not allow Kaiser row standardization with equal loadings, while
+lavaan keeps Kaiser weights for varimax and promax.
+
+With oblique target rotation (ESEM) the rotation standard errors use
+lavaan's delta method (\code{rotation.se = "delta"}) with
+\code{rotation.args$gpa.tol = 1e-6}, which agrees more closely with Mplus
+at the configural level than lavaan's default \code{"bordered"}; the
+tighter tolerance keeps the delta-method standard errors from depending on
+the random rotation starts. B-ESEM (orthogonal target rotation) keeps
+\code{"bordered"}. A \code{rotation.se} passed through \code{...} is kept.
+}
+
 \section{Estimator paths}{
 
 \describe{

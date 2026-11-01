@@ -44,7 +44,10 @@ ordered B-ESEM use \code{method = "rotation"} there (default in
 
 \item{group}{Character. Grouping variable for multi-group B-ESEM.}
 
-\item{group_equal}{Character vector of lavaan equality constraints.}
+\item{group_equal}{Character vector of lavaan equality constraints. With
+\code{"loadings"} and a \code{group}, the common loading matrix is
+rotated without row scaling, as in Mplus (see "Rotation across groups"
+in \code{\link{esem_invariance}}).}
 
 \item{missing}{Character. Missing data handling for \strong{continuous} B-ESEM.
 Default \code{"listwise"}. When \code{ordered} is set, passed to
